@@ -1,4 +1,21 @@
-credentials.json
+# secrets / credentials
+.streamlit/secrets.toml
 .env
+*credentials*.json
+credentials.json
+*service_account*.json
+service_account.json
+
+
+# python
 __pycache__/
-.streamlit/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
