@@ -16,13 +16,14 @@ router_confidence_threshold = 0.5 # Decider under this confidence below this -> 
 
 [models.gemini_flash]
 provider = "google_genai"
-model = "gemini-2.5-flash"
+model = "gemini-3.8-flash"
 
 [models.gemini_flash_lite]
 provider = "google_genai"
-model = "gemini-2.5-flash-lite"
+model = "gemini-3.5-flash-lite"
 
 [models.mercury_decide_free]
+kind = "decision"
 provider = "openrouter"
 model = "inception/mercury-decide:free"
 

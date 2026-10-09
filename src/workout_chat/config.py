@@ -28,11 +28,10 @@ DATA_CACHE_TTL_SECONDS = 600
 # Secrets
 # --------------------------------------------------------------------------
 REQUIRED_SECRETS = ("GEMINI_API_KEY", "GOOGLE_SHEET_URL", "APP_PASSWORD", "gcp_service_account")
-OPTIONAL_SECRETS = ("TYPESAFE_API_KEY", "OPENROUTER_API_KEY")
+OPTIONAL_SECRETS = ("OPENROUTER_API_KEY",)
 
 # Which secret each provider needs. A model is skipped if its secret is missing.
 PROVIDER_SECRETS = {
-    "typesafe": "TYPESAFE_API_KEY",
     "google_genai": "GEMINI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
 }
@@ -86,7 +85,13 @@ def missing_secrets() -> list[str]:
 # --------------------------------------------------------------------------
 # models.toml
 # --------------------------------------------------------------------------
+# Required nodes. [nodes] may contain extra keys (e.g. a model for one specific tool);
+# they get the same validation and are available through ModelConfig.chain().
 NODE_NAMES = ("router", "rewriter", "coder", "synthesizer")
+
+# "chat"     = normal chat/completions model (text or structured output)
+# "decision" = typed-question decision model (JSON in, JSON out, e.g. mercury-decide)
+MODEL_KINDS = ("chat", "decision")
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "temperature": 0.0,
@@ -101,6 +106,7 @@ class ModelSpec:
     key: str
     provider: str
     model: str
+    kind: str
     params: dict[str, Any]
 
 
@@ -140,15 +146,20 @@ def load_model_config(path: Path | str = MODELS_FILE) -> ModelConfig:
                 f"[models.{key}] has unknown provider '{entry['provider']}'. "
                 f"Known providers: {', '.join(PROVIDER_SECRETS)}"
             )
-        params = {k: v for k, v in entry.items() if k not in ("provider", "model")}
-        models[key] = ModelSpec(key, entry["provider"], entry["model"], params)
+        kind = entry.get("kind", "chat")
+        if kind not in MODEL_KINDS:
+            raise ConfigError(f"[models.{key}] has unknown kind '{kind}'. Known kinds: {', '.join(MODEL_KINDS)}")
+        params = {k: v for k, v in entry.items() if k not in ("provider", "model", "kind")}
+        models[key] = ModelSpec(key, entry["provider"], entry["model"], kind, params)
 
     nodes_raw = raw.get("nodes", {})
-    nodes: dict[str, tuple[str, ...]] = {}
     for node in NODE_NAMES:
-        keys = nodes_raw.get(node)
-        if not keys:
+        if not nodes_raw.get(node):
             raise ConfigError(f"[nodes] is missing a non-empty list for '{node}'")
+    nodes: dict[str, tuple[str, ...]] = {}
+    for node, keys in nodes_raw.items():
+        if not keys:
+            raise ConfigError(f"[nodes] '{node}' must list at least one model")
         unknown = [k for k in keys if k not in models]
         if unknown:
             raise ConfigError(f"[nodes] '{node}' references undefined models: {', '.join(unknown)}")
