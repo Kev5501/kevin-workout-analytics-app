@@ -1,8 +1,15 @@
-streamlit
-pandas
-gspread
-matplotlib
-langchain-google-genai
-langchain-experimental
-google-auth
-tabulate
+# Pinned from a clean resolve on Python 3.12 (Oct 2026).
+# Streamlit Community Cloud: set Python 3.12 under Advanced settings.
+streamlit==1.65.0
+langgraph==1.2.13
+langchain-core==1.6.6
+langchain-google-genai==4.4.0
+langchain-openai==1.6.7
+gspread==6.2.1
+google-auth==2.60.0
+pandas==3.0.6
+numpy==2.5.3
+duckdb==1.5.6
+plotly==7.1.0
+pydantic==2.13.5
+pytest==9.1.1
