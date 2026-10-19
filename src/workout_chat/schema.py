@@ -16,7 +16,7 @@ DF_NAME = "df"                  # variable name for generated pandas code
 SQL_TABLE_NAME = "workouts"     # table name for generated SQL (same columns as df)
 COMMENT_MASK = "[masked]"
 MASKED_COLUMNS = ("Comment",)   # never shown to a model in sample rows
-CATEGORICAL_COLUMNS = ("Gym_Day", "Type", "Exersize")  # exact values are listed for the coder
+CATEGORICAL_COLUMNS = ("Gym_Day", "Type", "Exercise")  # exact values are listed for the coder
 
 ROW_MEANING = "Each row is one set performed in the gym."
 
@@ -37,8 +37,8 @@ DATA_DICTIONARY: tuple[ColumnDoc, ...] = (
     ColumnDoc("Gym_Day", "text", "Muscle group trained that day",
               "The muscles targeted in the gym session in which the set was performed. 'Lower' and 'Legs' "
               "have different names but are the same gym day (split: Push, Pull, Legs, Rest, Upper, Lower, Rest)."),
-    ColumnDoc("Exersize", "text", "Exercise name",
-              "The name of the exercise performed. NOTE: the column name is spelled 'Exersize' in the data."),
+    ColumnDoc("Exercise", "text", "Exercise name",
+              "The name of the exercise performed. NOTE: the column name is spelled 'Exercise' in the data."),
     ColumnDoc("Type", "text", "Hypertrophy or Strength",
               "Whether the intended outcome of the exercise was Hypertrophy (muscle growth) or Strength gain."),
     ColumnDoc("Set_Number", "integer", "Set number within that exercise today",
@@ -61,6 +61,39 @@ DATA_DICTIONARY: tuple[ColumnDoc, ...] = (
               "Free-text notes about the workout as a whole, NOT per set: every set from the same workout "
               "shares the same comment. Anything not captured by the other columns lives here (injuries, "
               "mood or sentiment, form notes, quality of pump, etc.). Sample rows show this column masked."),
+    ColumnDoc("workout_rating", "number (1-5)", "Overall rating of the workout based on comment",
+              "Overall rating of the workout based on the lifters comment. Column can contain NA string "
+              "values if there was not enough information in comment to rate the workout or be blank if comment has not been processed yet. "
+              "Rated from 1-5 as follows: 1 = very bad workout, 2 = bad workout, 3 = okay workout, 4 = good workout , 5 = very good workout."),
+    ColumnDoc("pump_rating", "number (1-3)", "Overall rating of pump based on comment",
+              "How good the lifters pump was during thier workout. Column can contain NA string "
+              "values if there was not enough information in comment to rate the pump or be blank if comment has not been processed yet. "
+              "Rated from 1-3 as follows: 1 = Below average pump, 2 = Average pump, 3 = Abouve average pump."),
+    ColumnDoc("injury_ind", "binary (0/1)", "Indicator if lifter had any injury/pain/tweaks",
+              "Indicator for if the lifter had pain, a tweak, an injury or joint/muscle discomfort beyond normal training soreness. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("illness_ind", "binary (0/1)", "Indicator if lifter was ill",
+              "Indicator for if the lifter was ill in any way during the workout. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("girlfriend_ind", "binary (0/1)", "Indicator if lifter's girlfriend was present",
+              "Indicator for if the lifter's girlfriend was present during the workout. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("fatigue_ind", "binary (0/1)", "Indicator if lifter felt fatigued or not recovrered",
+              "Indicator for if the lifter felt tired, fatigued, not recovrered, or had a lack of sleep for the workout. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("vacation_ind", "binary (0/1)", "Indicator if lifter was on vacation",
+              "Indicator for if the lifter was on any sort of vacation for the workout. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("form_change_ind", "binary (0/1)", "Indicator if lifter changed his form/tecnique on any exercise",
+              "Indicator for if the lifter had any sort of change in form, technique, or execution of exersizes for the workout. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("forgot_headphones_ind", "binary (0/1)", "Indicator if lifter forgot his headphones",
+              "Indicator for if the lifter forgot or did not have his headphones for the workout. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("other_extenuating_circumstances_ind", "binary (0/1)", "Indicator if there was other extenuating circumstances for this workout",
+              "Indicator for if there were  any sort of extenuating circumstances for workout that are unrelated to injury, "
+              "illness, fatigue, vacation, form change, or forgetting headphones. "
+              "Column can be blank if comment has not been processed yet to create this feature."),
 )
 
 _DOC_BY_NAME = {d.name: d for d in DATA_DICTIONARY}
@@ -144,7 +177,7 @@ def router_domain_description() -> str:
 # --------------------------------------------------------------------------
 def build_greeting(df: pd.DataFrame) -> str:
     first, last = df["Date"].min(), df["Date"].max()
-    top = df["Exersize"].value_counts().index[0] if df["Exersize"].notna().any() else None
+    top = df["Exercise"].value_counts().index[0] if df["Exercise"].notna().any() else None
     trend_q = (
         f"How has Kevin's estimated one-rep max on {top} trended over the last 6 months?"
         if top else "How has Kevin's estimated one-rep max trended over the last 3 months?"

@@ -17,14 +17,16 @@ from .config import SHEET_WORKSHEET, SHEETS_SCOPES, get_secret
 
 # Column types, taken from the data dictionary. schema.py adds the descriptions.
 DATE_COLUMNS = ("Date",)
-TEXT_COLUMNS = ("Set_ID", "Gym_Day", "Exersize", "Type", "Comment")
-INT_COLUMNS = ("Set_Number", "Reps")
-# RPE is float: the dictionary calls it an integer but uses half-steps (9.5, 8.5).
+TEXT_COLUMNS = ("Set_ID", "Gym_Day", "Exercise", "Type", "Comment")
+INT_COLUMNS = ("Set_Number", "Reps",)
 FLOAT_COLUMNS = ("Weight", "RPE", "RPE_Norm_Weight", "Body_Weight")
 
 EXPECTED_COLUMNS = (
-    "Date", "Set_ID", "Gym_Day", "Exersize", "Type", "Set_Number",
+    "Date", "Set_ID", "Gym_Day", "Exercise", "Type", "Set_Number",
     "Weight", "Reps", "RPE", "RPE_Norm_Weight", "Body_Weight", "Comment",
+    "workout_rating", "pump_rating", "injury_ind", "illness_ind", "girlfriend_ind",
+    "fatigue_ind", "vacation_ind", "form_change_ind", "forgot_headphones_ind",
+    "other_extenuating_circumstances_ind",
 )
 
 # Google Sheets serial dates (days since 1899-12-30); sane range ~1954-2119.

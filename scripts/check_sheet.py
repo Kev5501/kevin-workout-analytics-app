@@ -34,7 +34,7 @@ def main() -> int:
     print("\nNulls per column:\n", df.isna().sum().to_string())
     for col in ("Gym_Day", "Type"):
         print(f"\n{col} values:", sorted(df[col].dropna().unique()))
-    print(f"\nDistinct Exersize values: {df['Exersize'].nunique()}")
+    print(f"\nDistinct Exercise values: {df['Exercise'].nunique()}")
     print("\nSample (Comment masked):\n", df.head(5).assign(Comment="[masked]").to_string())
     return 0
 
