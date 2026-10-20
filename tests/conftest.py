@@ -1,9 +1,9 @@
 import pytest
 
 from workout_chat import config
-from workout_chat.data import EXPECTED_COLUMNS, clean_dataframe
+from workout_chat.data import CORE_COLUMNS, clean_dataframe
 
-HEADER = list(EXPECTED_COLUMNS)
+HEADER = list(CORE_COLUMNS)  # the 12 required columns; feature columns are optional
 
 
 @pytest.fixture(autouse=True)

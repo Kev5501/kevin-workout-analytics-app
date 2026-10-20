@@ -4,7 +4,7 @@ import pandas as pd
 
 from conftest import HEADER, make_row
 from workout_chat import schema
-from workout_chat.data import EXPECTED_COLUMNS, clean_dataframe
+from workout_chat.data import EXPECTED_COLUMNS, FEATURE_COLUMNS, clean_dataframe
 from workout_chat.schema import (
     COMMENT_MASK, DATA_DICTIONARY, build_greeting, build_schema_context, router_domain_description,
 )
@@ -12,6 +12,13 @@ from workout_chat.schema import (
 
 def test_dictionary_covers_every_expected_column_in_order():
     assert tuple(d.name for d in DATA_DICTIONARY) == EXPECTED_COLUMNS
+
+
+def test_dictionary_never_tells_the_model_to_look_for_na_strings():
+    """Cleaned features are null, not the string 'NA'; the text must say so."""
+    for doc in DATA_DICTIONARY:
+        if doc.name in FEATURE_COLUMNS:
+            assert "null" in doc.detail.lower(), doc.name
 
 
 # ---- schema context ---------------------------------------------------------
@@ -25,7 +32,7 @@ def test_context_basics(sample_df):
     ctx = build_schema_context(sample_df)
     assert "Rows: 6" in ctx and "2025-03-05 to 2025-03-14" in ctx
     assert f"`{schema.DF_NAME}`" in ctx and f"`{schema.SQL_TABLE_NAME}`" in ctx
-    assert "Exersize" in ctx  # dictionary mentions the spelling
+    assert "Exercise" in ctx  # dictionary mentions the spelling
 
 
 def test_context_lists_exact_values_most_frequent_first(sample_df):
@@ -66,7 +73,7 @@ def test_context_still_works_when_comments_are_all_empty():
 def test_router_description_is_short_and_data_free():
     text = router_domain_description()
     assert len(text) < 900
-    for col in ("Exersize", "RPE", "Weight", "Comment"):
+    for col in ("Exercise", "RPE", "Weight", "Comment"):
         assert col in text
 
 

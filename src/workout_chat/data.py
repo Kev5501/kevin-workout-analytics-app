@@ -18,16 +18,30 @@ from .config import SHEET_WORKSHEET, SHEETS_SCOPES, get_secret
 # Column types, taken from the data dictionary. schema.py adds the descriptions.
 DATE_COLUMNS = ("Date",)
 TEXT_COLUMNS = ("Set_ID", "Gym_Day", "Exercise", "Type", "Comment")
-INT_COLUMNS = ("Set_Number", "Reps",)
+INT_COLUMNS = ("Set_Number", "Reps")
+# RPE is float: the dictionary calls it an integer but uses half-steps (9.5, 8.5).
 FLOAT_COLUMNS = ("Weight", "RPE", "RPE_Norm_Weight", "Body_Weight")
 
-EXPECTED_COLUMNS = (
+# Core columns: the sheet must have all of these or loading fails.
+CORE_COLUMNS = (
     "Date", "Set_ID", "Gym_Day", "Exercise", "Type", "Set_Number",
     "Weight", "Reps", "RPE", "RPE_Norm_Weight", "Body_Weight", "Comment",
-    "workout_rating", "pump_rating", "injury_ind", "illness_ind", "girlfriend_ind",
-    "fatigue_ind", "vacation_ind", "form_change_ind", "forgot_headphones_ind",
-    "other_extenuating_circumstances_ind",
 )
+
+# Features derived from Comment (by an AI agent). All optional: if a column is absent the app
+# keeps working. Each is a nullable integer (Int64); blank (not processed yet) and "NA" (comment
+# had too little information) both become missing (pd.NA). Anything else invalid -> NA and is counted.
+ORDINAL_COLUMNS = {"workout_rating": (1, 5), "pump_rating": (1, 3)}  # column -> (min, max)
+BINARY_COLUMNS = (
+    "injury_ind", "illness_ind", "girlfriend_ind", "fatigue_ind", "vacation_ind",
+    "form_change_ind", "forgot_headphones_ind", "other_extenuating_circumstances_ind",
+)
+FEATURE_COLUMNS = tuple(ORDINAL_COLUMNS) + BINARY_COLUMNS
+NA_TOKENS = frozenset({"na", "n/a", "nan", "null", "none", "-"})
+
+# Every documented column, in display order (schema.py's dictionary must match this).
+EXPECTED_COLUMNS = CORE_COLUMNS + FEATURE_COLUMNS
+REQUIRED_COLUMNS = CORE_COLUMNS
 
 # Google Sheets serial dates (days since 1899-12-30); sane range ~1954-2119.
 _SERIAL_MIN, _SERIAL_MAX = 20_000, 80_000
@@ -121,6 +135,45 @@ def _clean_extra(series: pd.Series) -> pd.Series:
     return _clean_text(series)
 
 
+def _clean_feature(series: pd.Series, low: int, high: int) -> tuple[pd.Series, int]:
+    """Parse a comment-derived feature to nullable Int64 within [low, high].
+
+    Blank and NA-like values become <NA>. Values that are present but invalid (text, 3.5, 0 for a
+    1-5 scale, ...) also become <NA> and are counted so the problem is visible, not silent.
+    """
+    invalid = 0
+
+    def parse(value: Any) -> Any:
+        nonlocal invalid
+        if _is_blank(value):
+            return pd.NA
+        if isinstance(value, bool):
+            number: float = float(value)
+        elif isinstance(value, (int, float)):
+            number = float(value)
+        else:
+            text = str(value).strip().lower()
+            if text in NA_TOKENS:
+                return pd.NA
+            if text in ("true", "yes"):
+                number = 1.0
+            elif text in ("false", "no"):
+                number = 0.0
+            else:
+                try:
+                    number = float(text.replace(",", ""))
+                except ValueError:
+                    invalid += 1
+                    return pd.NA
+        if number != number or not number.is_integer() or not low <= number <= high:
+            invalid += 1
+            return pd.NA
+        return int(number)
+
+    values = [parse(v) for v in series]
+    return pd.Series(pd.array(values, dtype="Int64"), index=series.index), invalid
+
+
 def clean_dataframe(rows: list[list[Any]]) -> pd.DataFrame:
     """Turn raw sheet rows (header first) into a typed DataFrame."""
     if not rows:
@@ -133,7 +186,7 @@ def clean_dataframe(rows: list[list[Any]]) -> pd.DataFrame:
     duplicates = sorted({n for n in names if names.count(n) > 1})
     if duplicates:
         raise DataLoadError(f"Duplicate column headers: {', '.join(duplicates)}.")
-    missing = [c for c in EXPECTED_COLUMNS if c not in names]
+    missing = [c for c in REQUIRED_COLUMNS if c not in names]
     if missing:
         raise DataLoadError(f"Missing expected columns: {', '.join(missing)}. Found: {', '.join(names)}.")
 
@@ -147,6 +200,15 @@ def clean_dataframe(rows: list[list[Any]]) -> pd.DataFrame:
     df["Date"] = _parse_dates(df["Date"])
     df = df[df["Date"].notna()]
     dropped = n_before - len(df)
+
+    present_features = [c for c in FEATURE_COLUMNS if c in df]
+    unprocessed = int(df[present_features].map(_is_blank).all(axis=1).sum()) if present_features else 0
+    feature_issues: dict[str, int] = {}
+    for col in present_features:
+        low, high = ORDINAL_COLUMNS.get(col, (0, 1))
+        df[col], bad = _clean_feature(df[col], low, high)
+        if bad:
+            feature_issues[col] = bad
 
     for col in TEXT_COLUMNS:
         df[col] = _clean_text(df[col])
@@ -163,10 +225,13 @@ def clean_dataframe(rows: list[list[Any]]) -> pd.DataFrame:
     if df.empty:
         raise DataLoadError("The sheet has a header but no rows with a valid Date.")
 
-    ordered = list(EXPECTED_COLUMNS) + [c for c in names if c not in EXPECTED_COLUMNS]
+    ordered = [c for c in EXPECTED_COLUMNS if c in names] + [c for c in names if c not in EXPECTED_COLUMNS]
     df = df[ordered].sort_values("Date", kind="stable").reset_index(drop=True)
     df.attrs["dropped_rows"] = dropped
     df.attrs["extra_columns"] = [c for c in names if c not in EXPECTED_COLUMNS]
+    df.attrs["missing_feature_columns"] = [c for c in FEATURE_COLUMNS if c not in names]
+    df.attrs["unprocessed_rows"] = unprocessed          # rows whose feature columns are all blank
+    df.attrs["feature_value_issues"] = feature_issues   # {column: count of invalid values -> NA}
     return df
 
 

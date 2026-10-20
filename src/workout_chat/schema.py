@@ -10,13 +10,15 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .data import EXPECTED_COLUMNS
+from .data import EXPECTED_COLUMNS, FEATURE_COLUMNS
 
 DF_NAME = "df"                  # variable name for generated pandas code
 SQL_TABLE_NAME = "workouts"     # table name for generated SQL (same columns as df)
 COMMENT_MASK = "[masked]"
 MASKED_COLUMNS = ("Comment",)   # never shown to a model in sample rows
 CATEGORICAL_COLUMNS = ("Gym_Day", "Type", "Exercise")  # exact values are listed for the coder
+# Values repeated on every set of a workout (Comment and the features derived from it).
+WORKOUT_LEVEL_COLUMNS = ("Comment", *FEATURE_COLUMNS)
 
 ROW_MEANING = "Each row is one set performed in the gym."
 
@@ -38,7 +40,7 @@ DATA_DICTIONARY: tuple[ColumnDoc, ...] = (
               "The muscles targeted in the gym session in which the set was performed. 'Lower' and 'Legs' "
               "have different names but are the same gym day (split: Push, Pull, Legs, Rest, Upper, Lower, Rest)."),
     ColumnDoc("Exercise", "text", "Exercise name",
-              "The name of the exercise performed. NOTE: the column name is spelled 'Exercise' in the data."),
+              "The name of the exercise performed."),
     ColumnDoc("Type", "text", "Hypertrophy or Strength",
               "Whether the intended outcome of the exercise was Hypertrophy (muscle growth) or Strength gain."),
     ColumnDoc("Set_Number", "integer", "Set number within that exercise today",
@@ -61,39 +63,39 @@ DATA_DICTIONARY: tuple[ColumnDoc, ...] = (
               "Free-text notes about the workout as a whole, NOT per set: every set from the same workout "
               "shares the same comment. Anything not captured by the other columns lives here (injuries, "
               "mood or sentiment, form notes, quality of pump, etc.). Sample rows show this column masked."),
-    ColumnDoc("workout_rating", "number (1-5)", "Overall rating of the workout based on comment",
-              "Overall rating of the workout based on the lifters comment. Column can contain NA string "
-              "values if there was not enough information in comment to rate the workout or be blank if comment has not been processed yet. "
-              "Rated from 1-5 as follows: 1 = very bad workout, 2 = bad workout, 3 = okay workout, 4 = good workout , 5 = very good workout."),
-    ColumnDoc("pump_rating", "number (1-3)", "Overall rating of pump based on comment",
-              "How good the lifters pump was during thier workout. Column can contain NA string "
-              "values if there was not enough information in comment to rate the pump or be blank if comment has not been processed yet. "
-              "Rated from 1-3 as follows: 1 = Below average pump, 2 = Average pump, 3 = Abouve average pump."),
-    ColumnDoc("injury_ind", "binary (0/1)", "Indicator if lifter had any injury/pain/tweaks",
-              "Indicator for if the lifter had pain, a tweak, an injury or joint/muscle discomfort beyond normal training soreness. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
-    ColumnDoc("illness_ind", "binary (0/1)", "Indicator if lifter was ill",
-              "Indicator for if the lifter was ill in any way during the workout. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
-    ColumnDoc("girlfriend_ind", "binary (0/1)", "Indicator if lifter's girlfriend was present",
-              "Indicator for if the lifter's girlfriend was present during the workout. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
-    ColumnDoc("fatigue_ind", "binary (0/1)", "Indicator if lifter felt fatigued or not recovrered",
-              "Indicator for if the lifter felt tired, fatigued, not recovrered, or had a lack of sleep for the workout. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
-    ColumnDoc("vacation_ind", "binary (0/1)", "Indicator if lifter was on vacation",
-              "Indicator for if the lifter was on any sort of vacation for the workout. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
-    ColumnDoc("form_change_ind", "binary (0/1)", "Indicator if lifter changed his form/tecnique on any exercise",
-              "Indicator for if the lifter had any sort of change in form, technique, or execution of exersizes for the workout. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
-    ColumnDoc("forgot_headphones_ind", "binary (0/1)", "Indicator if lifter forgot his headphones",
-              "Indicator for if the lifter forgot or did not have his headphones for the workout. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
-    ColumnDoc("other_extenuating_circumstances_ind", "binary (0/1)", "Indicator if there was other extenuating circumstances for this workout",
-              "Indicator for if there were  any sort of extenuating circumstances for workout that are unrelated to injury, "
-              "illness, fatigue, vacation, form change, or forgetting headphones. "
-              "Column can be blank if comment has not been processed yet to create this feature."),
+    ColumnDoc("workout_rating", "number (1-5)", "Overall rating of the workout, based on the comment",
+              "Overall rating of the workout, inferred from the lifter's comment: 1 = very bad, 2 = bad, "
+              "3 = okay, 4 = good, 5 = very good. Missing (null) if the comment had too little information "
+              "to rate the workout or has not been processed yet. Never compare it to the string 'NA'."),
+    ColumnDoc("pump_rating", "number (1-3)", "Rating of the pump, based on the comment",
+              "How good the lifter's pump was, inferred from the comment: 1 = below average, 2 = average, "
+              "3 = above average. Missing (null) if the comment had too little information to rate the pump "
+              "or has not been processed yet. Never compare it to the string 'NA'."),
+    ColumnDoc("injury_ind", "yes/no (1/0)", "Had pain, a tweak or an injury",
+              "1 if the lifter had pain, a tweak, an injury or joint/muscle discomfort beyond normal training "
+              "soreness, else 0. Missing (null) if the comment has not been processed yet."),
+    ColumnDoc("illness_ind", "yes/no (1/0)", "Was ill",
+              "1 if the lifter was ill in any way during the workout, else 0. "
+              "Missing (null) if the comment has not been processed yet."),
+    ColumnDoc("girlfriend_ind", "yes/no (1/0)", "Girlfriend was present",
+              "1 if the lifter's girlfriend was present during the workout, else 0. "
+              "Missing (null) if the comment has not been processed yet."),
+    ColumnDoc("fatigue_ind", "yes/no (1/0)", "Felt fatigued or not recovered",
+              "1 if the lifter felt tired, fatigued, not recovered, or lacked sleep for the workout, else 0. "
+              "Missing (null) if the comment has not been processed yet."),
+    ColumnDoc("vacation_ind", "yes/no (1/0)", "Was on vacation",
+              "1 if the lifter was on any sort of vacation for the workout, else 0. "
+              "Missing (null) if the comment has not been processed yet."),
+    ColumnDoc("form_change_ind", "yes/no (1/0)", "Changed form or technique",
+              "1 if the lifter had any change in form, technique or execution of exercises for the workout, else 0. "
+              "Missing (null) if the comment has not been processed yet."),
+    ColumnDoc("forgot_headphones_ind", "yes/no (1/0)", "Forgot his headphones",
+              "1 if the lifter forgot or did not have his headphones for the workout, else 0. "
+              "Missing (null) if the comment has not been processed yet."),
+    ColumnDoc("other_extenuating_circumstances_ind", "yes/no (1/0)", "Other extenuating circumstances",
+              "1 if there were extenuating circumstances for the workout unrelated to injury, illness, fatigue, "
+              "vacation, form change or forgetting headphones, else 0. "
+              "Missing (null) if the comment has not been processed yet."),
 )
 
 _DOC_BY_NAME = {d.name: d for d in DATA_DICTIONARY}
@@ -136,6 +138,39 @@ def _allowed_values(df: pd.DataFrame, col: str, max_values: int) -> str:
     return f"{col} ({len(counts)} distinct, most frequent first): {json.dumps(shown)}{note}"
 
 
+def _missing_value_lines(df: pd.DataFrame, workout_level: list[str]) -> list[str]:
+    """Where values are missing, and how the code model should treat them."""
+    per_set = [c for c in df.columns if c not in workout_level]
+    set_nulls = df[per_set].isna().sum()
+    set_nulls = set_nulls[set_nulls > 0]
+    workouts = df.drop_duplicates("Date")
+    wk_nulls = workouts[workout_level].isna().sum() if workout_level else pd.Series(dtype=int)
+    wk_nulls = wk_nulls[wk_nulls > 0]
+    if set_nulls.empty and wk_nulls.empty:
+        return []
+
+    lines = [""]
+    if not set_nulls.empty:
+        lines.append("Missing values: " + ", ".join(f"{c}: {n}" for c, n in set_nulls.items()) + " (counted in sets)")
+    if not wk_nulls.empty:
+        lines.append(
+            f"Missing values in workout-level columns, counted in workouts (of {len(workouts)}): "
+            + ", ".join(f"{c}: {n}" for c, n in wk_nulls.items())
+        )
+    lines += [
+        "Handling missing values (null = unknown, NOT 0 and NOT 'no'):",
+        "- Never drop or filter rows for nulls in a column the question does not use. A question about bench press "
+        "weight keeps every row even if workout_rating is null.",
+        "- When a question does use a column, ignore that column's nulls for that calculation only. pandas "
+        "mean/sum/count and SQL AVG/COUNT(col) already skip nulls, and comparisons such as == 1 or = 0 leave unknowns out. "
+        "To filter explicitly, use .notna() or IS NOT NULL.",
+        "- Never fillna(0), astype(int) or astype(bool) these columns, and never use the total number of workouts or sets "
+        "as the denominator for a rate. Divide by the number of workouts that have a value (mean() or COUNT(col) does this).",
+        "- Tell the user how many workouts had a value for the column(s) used, out of the total.",
+    ]
+    return lines
+
+
 def build_schema_context(df: pd.DataFrame, n_samples: int = 5, max_values: int = 150) -> str:
     """Everything a code-writing model needs to know about the data. Comment text is never included."""
     lines = [
@@ -150,10 +185,16 @@ def build_schema_context(df: pd.DataFrame, n_samples: int = 5, max_values: int =
         doc = _DOC_BY_NAME.get(col)
         lines.append(f"- {col} ({_dtype_label(df[col])}): {doc.detail if doc else '(no description available)'}")
 
-    nulls = df.isna().sum()
-    nulls = nulls[nulls > 0]
-    if not nulls.empty:
-        lines += ["", "Missing values: " + ", ".join(f"{c}: {n}" for c, n in nulls.items())]
+    workout_level = [c for c in WORKOUT_LEVEL_COLUMNS if c in df.columns]
+    lines += [
+        "",
+        f"Workout-level columns ({', '.join(workout_level)}): every set in a workout repeats the same value, and "
+        "one workout = one Date. To count or average across WORKOUTS, first keep one row per Date "
+        f"(pandas: {DF_NAME}.drop_duplicates('Date'); SQL: SELECT DISTINCT Date, <column> FROM {SQL_TABLE_NAME}). "
+        "Using every row instead would weight each workout by its number of sets.",
+    ]
+
+    lines += _missing_value_lines(df, workout_level)
 
     lines += ["", "Exact values (use these spellings when filtering):"]
     lines += [_allowed_values(df, c, max_values) for c in CATEGORICAL_COLUMNS if c in df]
@@ -179,8 +220,8 @@ def build_greeting(df: pd.DataFrame) -> str:
     first, last = df["Date"].min(), df["Date"].max()
     top = df["Exercise"].value_counts().index[0] if df["Exercise"].notna().any() else None
     trend_q = (
-        f"How has Kevin's estimated one-rep max on {top} trended over the last 6 months?"
-        if top else "How has Kevin's estimated one-rep max trended over the last 3 months?"
+        f"How has Kevin's estimated one-rep max on {top} trended over the last 3 months?"
+        if top else "How has my estimated one-rep max trended over the last 3 months?"
     )
 
     rows = ["| Column | Type | What it holds |", "|---|---|---|"]
@@ -208,6 +249,6 @@ def build_greeting(df: pd.DataFrame) -> str:
         "**Try asking:**",
         *[f"- {q}" for q in examples],
         "",
-        "Follow-up questions work, since I remember this conversation. I can add a chart "
-        "when it helps, and only answer questions about Kevin's workout data.",
+        "Follow-up questions work, since I remember this conversation. I'll show the code I ran, add a chart "
+        "when it helps, and only answer questions about this workout data.",
     ])

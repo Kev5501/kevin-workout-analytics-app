@@ -1,9 +1,9 @@
 import pandas as pd
 import pytest
 
-from workout_chat.data import EXPECTED_COLUMNS, DataLoadError, clean_dataframe
+from workout_chat.data import CORE_COLUMNS, DataLoadError, clean_dataframe
 
-HEADER = list(EXPECTED_COLUMNS)
+HEADER = list(CORE_COLUMNS)
 
 
 def row(date="2025-03-14", set_id="S1", day="Push", ex="Bench Press", typ="Hypertrophy",
