@@ -24,10 +24,16 @@ SHEET_WORKSHEET = "Cleaned_Data"
 SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 DATA_CACHE_TTL_SECONDS = 600
 
+# Guest limits. Per session: questions one guest session may ask. Daily: questions ALL guests together may ask
+# per UTC day (a safety net, because a page refresh starts a new session). Set the daily limit to 0 to disable it.
+GUEST_QUESTION_LIMIT = 5
+GUEST_DAILY_LIMIT = 30
+
 # --------------------------------------------------------------------------
 # Secrets
 # --------------------------------------------------------------------------
-REQUIRED_SECRETS = ("GEMINI_API_KEY", "GOOGLE_SHEET_URL", "APP_PASSWORD", "gcp_service_account")
+# APP_PASSWORD is Kevin's password (no question limit); GUEST_PASSWORD is for visitors (limited).
+REQUIRED_SECRETS = ("GEMINI_API_KEY", "GOOGLE_SHEET_URL", "APP_PASSWORD", "GUEST_PASSWORD", "gcp_service_account")
 OPTIONAL_SECRETS = ("OPENROUTER_API_KEY",)
 
 # Which secret each provider needs. A model is skipped if its secret is missing.

@@ -1,149 +1,151 @@
-import streamlit as st
-import pandas as pd
-import gspread
-import matplotlib.pyplot as plt
-from google.oauth2.service_account import Credentials
-from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
+"""Streamlit entry point: login -> greeting -> chat over Kevin's workout log."""
+import sys
+import time
+import uuid
+from pathlib import Path
 
-# ==========================================
-# 1. HARDCODED CONFIGURATION
-# ==========================================
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-GOOGLE_SHEET_URL = st.secrets["GOOGLE_SHEET_URL"]
-#SERVICE_ACCOUNT_FILE = "C:\Users\Razer55\Downloads\Workout_LLM\API_Keys\credentials.json"
-APP_PASSWORD = st.secrets["APP_PASSWORD"]
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-# --- SYSTEM PROMPT ---
-SYSTEM_CONTEXT = """
-You are a senior data analyst. 
-1. When asked for trends, averages, or comparisons, only create a chart when the user specifies that is what they wish to see (line chart, bar chart, or histogram) using matplotlib.
-2. Use clear labels and titles for any charts you create.
-3. If you create a chart, finish your thought by explaining what the chart shows.
-4. If a calculation is requested, show the steps.
-5. If you are unsure what the user is asking, always ask clarifying questions until you are sure you can answer accurately (Ex. what exercise, set, time frame the user is asking about)
-6. Understand that the questions will be based on Kevin's workout log data set, so use your best knowledge to use and understand the terms popular in the world of strength training and bodybuilding
-7. Only answer questions related to this dataset
+import plotly.io as pio  # noqa: E402
+import streamlit as st  # noqa: E402
+from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 
-Use the following data dictionary to understand the data:
--Row meaning: each unique row represents a distinct set that was performed
-- Column A - "Date" (date): The date that the set was performed on
-- Column B - "Set_ID" (string): The unique identifier for each set
-- Column C - "Gym_Day" (string): The muscles that were targetted that day in the gym in which the set was performed, lower and legs despite having different names can be treated as the same gym day (based on the Push, Pull, Legs, Rest, Upper, Lower, Rest workout split)
-- Column D - "Exersize" (string): The name of the exersize that was performed
-- Column E - "Type" (string): If the intended outcome of the exersize was either Hypertrophy (muscle growth) or Strength gain
-- Column F - "Set_Number" (integer): The set number for a given exersize within the workout, a set number of 1 indicates that was my first set of a particular exersize that day
-- Column G - "Weight" (float): How much weight in Lbs was used for the set, any exersize that was performed with dumbells will have the weight per dumbell while any other exersize will have the total weight that was used
-- Column H - "Reps"(integer): How many repetitions were done in a given set
-- Column I - "RPE"(integer): The Rate of Perceived Exertion for a given set measured on a scale from 1-10 with 10 meaning I could do 0 more reps, 9.5 meaning I could maybe do 1 more rep or add slightly more weight, 9 meaning I could do one more rep, 8.5 meaning I could for sure do 1 more rep maybe 2 more, and so forth
-- Column J - "RPE_Norm_Weight" (float): Using an RPE scale and the reps and RPE of a given set this is the estimated one rep max I could have done on an exersize based on a given set, this allows us to compare strength trends across different rep ranges evenly
-- Column K - "Body_Weight"(float): My body weight in Lbs the day the set was performed
-- Column L - "Comment" (string): This is on a workout level not a set level meaning all sets performed in the same workout will share the same comment, this feild is used for my overall thoughts on the workout and how it went, any questions that involve factors that cannot be found in the other feilds of this table such as injuries, sentiment, mood, form comments, quality of pump, etc would be found in this comment column
+from workout_chat import access, config, data, graph as graph_module  # noqa: E402
+from workout_chat.schema import build_greeting  # noqa: E402
 
-"""
+st.set_page_config(page_title="Kevin's Workout Chat", page_icon="🏋️", layout="centered")
 
-# ==========================================
-# 2. PASSWORD PROTECTION
-# ==========================================
-st.set_page_config(page_title="Kevin Workout Assistant", layout="wide")
 
-if "password_correct" not in st.session_state:
-    st.session_state.password_correct = False
+# ---- shared across all sessions of this app process --------------------------------------
+@st.cache_resource
+def get_saver() -> InMemorySaver:
+    return InMemorySaver()
 
-if not st.session_state.password_correct:
-    st.title("Private Access")
-    pwd = st.text_input("Enter Password", type="password")
-    if st.button("Login"):
-        if pwd == APP_PASSWORD:
-            st.session_state.password_correct = True
+
+@st.cache_resource
+def get_daily_counter() -> access.DailyCounter:
+    return access.DailyCounter()
+
+
+@st.cache_resource(ttl=config.DATA_CACHE_TTL_SECONDS, show_spinner="Loading Kevin's workout log...")
+def get_app():
+    df = data.load_dataframe()
+    return df, graph_module.build_graph(df, checkpointer=get_saver())
+
+
+# ---- login -----------------------------------------------------------------------------------
+def login_screen() -> None:
+    st.title("🏋️ Kevin's Workout Chat")
+    label = st.radio("Who are you?", list(access.ROLE_CHOICES), index=None)
+    if label is None:
+        st.stop()
+    role = access.ROLE_CHOICES[label]
+    with st.form("login"):
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Enter")
+    if submitted:
+        if access.verify_password(
+            role, password,
+            kevin_password=config.get_secret("APP_PASSWORD"),
+            guest_password=config.get_secret("GUEST_PASSWORD"),
+        ):
+            st.session_state.role = role
             st.rerun()
-        else:
-            st.error("Incorrect Password")
+        time.sleep(1)  # slow down guessing
+        st.error("Incorrect password")
     st.stop()
 
-# ==========================================
-# 3. DATA LOADING
-# ==========================================
-@st.cache_data(ttl=600)
-def load_data():
-    scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    
-    if "gcp_service_account" in st.secrets:
-        #For cloud creds
-        creds_info = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(creds_info, scopes=scope)
-    else:
-        #For local creds
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scope)
-    
-    client = gspread.authorize(creds)
-    sheet = client.open_by_url(GOOGLE_SHEET_URL).worksheet("Cleaned_Data")
-    return pd.DataFrame(sheet.get_all_records())
+
+def new_chat(df) -> None:
+    st.session_state.thread_id = uuid.uuid4().hex
+    greeting = build_greeting(df)
+    if st.session_state.role == access.GUEST:
+        greeting += f"\n\n*Guests can ask {config.GUEST_QUESTION_LIMIT} questions.*"
+    st.session_state.messages = [{"role": "assistant", "content": greeting}]
+
+
+def show(msg: dict, is_kevin: bool) -> None:
+    st.markdown(msg["content"])
+    if msg.get("figure_json"):
+        st.plotly_chart(pio.from_json(msg["figure_json"]), use_container_width=True)
+    if msg.get("code"):
+        with st.expander("Show the code that was run"):
+            st.code(msg["code"], language=msg.get("language") or "python")
+    if is_kevin and msg.get("debug"):
+        st.caption(msg["debug"])
+
+
+# ---- main -------------------------------------------------------------------------------------
+missing = config.missing_secrets()
+if missing:
+    st.error(f"Missing secrets: {', '.join(missing)}. Add them in .streamlit/secrets.toml (or the Streamlit Cloud secrets box).")
+    st.stop()
+
+if "role" not in st.session_state:
+    login_screen()
+
+role = st.session_state.role
+is_kevin = role == access.KEVIN
 
 try:
-    df = load_data()
+    df, graph = get_app()
+except data.DataLoadError as exc:
+    st.error(f"Could not load the workout log: {exc}")
+    st.stop()
 
-    # Initialize Gemini
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash-lite",
-        google_api_key=GEMINI_API_KEY,
-        temperature=0
+if "messages" not in st.session_state:
+    st.session_state.questions_asked = 0  # not reset by "New chat", so guests cannot reset their limit
+    new_chat(df)
+
+with st.sidebar:
+    if is_kevin:
+        st.caption("Signed in as Kevin (no question limit)")
+    else:
+        st.caption(f"Guest: {st.session_state.questions_asked} of {config.GUEST_QUESTION_LIMIT} questions used")
+    st.caption(f"{len(df):,} sets · {df['Date'].nunique():,} workouts · loaded {df.attrs.get('loaded_at', '')[:16].replace('T', ' ')} UTC")
+    if st.button("New chat"):
+        new_chat(df)
+        st.rerun()
+    if is_kevin and st.button("Refresh data"):
+        get_app.clear()
+        st.rerun()
+
+st.title("🏋️ Kevin's Workout Chat")
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        show(msg, is_kevin)
+
+question = st.chat_input("Ask about Kevin's workouts...")
+if question:
+    st.session_state.messages.append({"role": "user", "content": question})
+    verdict = access.check_question(
+        role, st.session_state.questions_asked, get_daily_counter(),
+        session_limit=config.GUEST_QUESTION_LIMIT, daily_limit=config.GUEST_DAILY_LIMIT,
     )
+    if not verdict.allowed:
+        st.session_state.messages.append({"role": "assistant", "content": access.LIMIT_MESSAGE})
+        st.rerun()
 
-    # Create the Agent
-    agent = create_pandas_dataframe_agent(
-        llm,
-        df,
-        verbose=True,
-        allow_dangerous_code=True,
-        prefix=SYSTEM_CONTEXT,
-        agent_type="zero-shot-react-description",
-    )
-
-    # ==========================================
-    # 4. CHAT INTERFACE
-    # ==========================================
-    st.title("Kevin Workout Assistant")
-    
-    # Sidebar data preview
-    with st.sidebar:
-        st.subheader("Data Preview")
-        st.dataframe(df.head(5))
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for msg in st.session_state.messages:
-        if msg["type"] == "text":
-            st.chat_message(msg["role"]).write(msg["content"])
-        elif msg["type"] == "chart":
-            st.chat_message("assistant").pyplot(msg["content"])
-
-    if prompt := st.chat_input("Ex: 'Draw a line chart of the last 30 days of Smith Incline Bench'"):
-        st.session_state.messages.append({"role": "user", "content": prompt, "type": "text"})
-        st.chat_message("user").write(prompt)
-
-        with st.chat_message("assistant"):
-            with st.spinner("Analyzing and generating visuals..."):
-                try:
-                    # Execute agent
-                    response = agent.invoke(prompt)
-                    answer = response["output"]
-                    
-                    # 1. Display text answer
-                    st.write(answer)
-                    st.session_state.messages.append({"role": "assistant", "content": answer, "type": "text"})
-                    
-                    # 2. Check if a chart was created in the background
-                    fig = plt.gcf() # Get Current Figure
-                    if fig.get_axes(): # If the figure has axes, it means a plot was drawn
-                        st.pyplot(fig)
-                        st.session_state.messages.append({"role": "assistant", "content": fig, "type": "chart"})
-                        plt.clf() # Clear the figure so it doesn't duplicate next time
-                        
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-except Exception as e:
-
-    st.error(f"Setup Error: {e}")
+    st.session_state.questions_asked = verdict.used
+    with st.chat_message("user"):
+        st.markdown(question)
+    with st.chat_message("assistant"):
+        with st.status("Working...", expanded=False) as status:
+            result = graph_module.run_turn(
+                graph, st.session_state.thread_id, question, on_step=lambda label: status.update(label=label)
+            )
+            status.update(label="Done", state="complete")
+    debug = ""
+    if result.route:
+        debug = f"route: {result.route}"
+        if result.models_used:
+            debug += " · models: " + ", ".join(f"{k}={v}" for k, v in result.models_used.items())
+        if result.standalone_question and result.standalone_question != question:
+            debug += f" · understood as: {result.standalone_question}"
+        if result.error:
+            debug += f" · detail: {result.error}"
+    st.session_state.messages.append({
+        "role": "assistant", "content": result.answer, "figure_json": result.figure_json,
+        "code": result.code, "language": result.language, "debug": debug,
+    })
+    st.rerun()

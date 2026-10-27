@@ -1,0 +1,76 @@
+# Questions for the live evaluation (tests/run_eval.py). Each answer is compared with a value computed
+# directly from the real data by the function named in `truth` (see TRUTH in run_eval.py).
+#   route:  the route the router should choose
+#   truth:  ground-truth function (omit for off-topic / clarify cases)
+#   chart:  true if the answer must include a chart
+#   thread: cases with the same thread name share one conversation (to test follow-ups)
+#   needs:  columns that must exist in the sheet, otherwise the case is skipped
+- id: total_sets
+  question: How many sets has Kevin logged in total?
+  route: sql
+  truth: total_sets
+- id: workout_count
+  question: How many separate workouts has Kevin done?
+  route: sql
+  truth: workout_count
+- id: top_exercise
+  question: Which exercise has Kevin done the most sets of?
+  route: sql
+  truth: top_exercise
+- id: heaviest_weight
+  question: What is the heaviest weight Kevin has ever lifted in a single set?
+  route: sql
+  truth: heaviest_weight
+  thread: heaviest
+- id: heaviest_exercise
+  question: On which exercise was that?
+  route: sql
+  truth: heaviest_exercise
+  thread: heaviest
+- id: avg_rpe
+  question: What is Kevin's average RPE across all sets that have an RPE?
+  route: sql
+  truth: avg_rpe
+- id: rpe_by_type
+  question: Compare Kevin's average RPE for each set Type.
+  route: sql
+  truth: rpe_by_type
+- id: total_volume
+  question: What is the total volume (weight x reps) Kevin has lifted across all sets?
+  route: sql
+  truth: total_volume
+- id: busiest_day
+  question: Which Gym_Day has Kevin trained the most times? Count workouts, not sets.
+  route: sql
+  truth: busiest_gym_day
+- id: latest_body_weight
+  question: What was Kevin's body weight in his most recent workout?
+  route: sql
+  truth: latest_body_weight
+- id: avg_workout_rating
+  question: What is the average workout_rating across Kevin's workouts that have a rating?
+  route: sql
+  truth: avg_workout_rating
+  needs: [workout_rating]
+- id: injury_workouts
+  question: In how many workouts did Kevin's notes mention an injury?
+  route: sql
+  truth: injury_workouts
+  needs: [injury_ind]
+- id: chart_body_weight
+  question: Draw a line chart of Kevin's body weight over time.
+  route: python
+  chart: true
+- id: chart_sets_per_exercise
+  question: Show a bar chart of the number of sets per exercise.
+  route: python
+  chart: true
+- id: off_topic_geography
+  question: What is the capital of France?
+  route: off_topic
+- id: off_topic_poem
+  question: Write me a poem about the ocean.
+  route: off_topic
+- id: vague
+  question: How is Kevin doing?
+  route: clarify
