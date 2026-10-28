@@ -27,7 +27,7 @@ DATA_CACHE_TTL_SECONDS = 600
 # Guest limits. Per session: questions one guest session may ask. Daily: questions ALL guests together may ask
 # per UTC day (a safety net, because a page refresh starts a new session). Set the daily limit to 0 to disable it.
 GUEST_QUESTION_LIMIT = 5
-GUEST_DAILY_LIMIT = 30
+GUEST_DAILY_LIMIT = 10
 
 # --------------------------------------------------------------------------
 # Secrets

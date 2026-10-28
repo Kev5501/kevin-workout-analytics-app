@@ -23,7 +23,9 @@ from langgraph.prebuilt import ToolNode
 from .config import ModelConfig
 from .nodes.replies import make_clarify_node, make_off_topic_node
 from .nodes.rewrite import make_rewrite_node
-from .nodes.router import ROUTE_CLARIFY, ROUTE_ERROR, make_prepare_node, make_route_node, next_after_route
+from .nodes.router import (
+    ROUTE_CLARIFY, ROUTE_ERROR, ROUTE_OFF_TOPIC, make_prepare_node, make_route_node, next_after_route,
+)
 from .nodes.synthesize import make_synthesize_node
 from .state import ChatState
 from .tools import TOOLS, ToolContext, ToolSpec, build_tools
@@ -31,16 +33,30 @@ from .tools import TOOLS, ToolContext, ToolSpec, build_tools
 logger = logging.getLogger(__name__)
 
 MAX_QUESTION_CHARS = 500
-STEP_LABELS = {
-    "start": "Reading the question...",
-    "route": "Working out what is being asked...",
-    "rewrite": "Resolving the follow-up...",
-    "prepare": "Choosing a tool...",
-    "tools": "Writing and running code...",
-    "synthesize": "Writing the answer...",
-    "clarify": "Preparing a question...",
-    "off_topic": "Checking the topic...",
+
+# The graph reports a node when it FINISHES, so each label below describes the step that starts next.
+INITIAL_LABEL = "Reading the question..."
+LABEL_AFTER = {
+    "start": "Working out what is being asked...",
+    "rewrite": "Writing and running code...",
+    "prepare": "Writing and running code...",
+    "tools": "Writing the answer...",
 }
+LABEL_FOLLOWUP = "Resolving the follow-up..."
+LABEL_CLARIFY = "Preparing a question..."
+
+
+def _label_after(node: str, update: dict | None) -> str | None:
+    """What is running now that ``node`` has finished (None when nothing slow follows)."""
+    if node != "route":
+        return LABEL_AFTER.get(node)
+    update = update or {}
+    route = update.get("route")
+    if route in (ROUTE_ERROR, ROUTE_OFF_TOPIC):
+        return None  # ends the turn, or a fixed reply with no model call
+    if route == ROUTE_CLARIFY:
+        return LABEL_CLARIFY
+    return LABEL_FOLLOWUP if update.get("is_followup") else LABEL_AFTER["prepare"]
 
 
 def _start_node(state: ChatState) -> dict:
@@ -111,10 +127,13 @@ def run_turn(graph, thread_id: str, question: str, on_step: Callable[[str], None
     """Run one question through the graph on conversation ``thread_id``. Never raises."""
     cfg = {"configurable": {"thread_id": thread_id}}
     try:
+        if on_step:
+            on_step(INITIAL_LABEL)
         for chunk in graph.stream({"messages": [HumanMessage(question)]}, cfg, stream_mode="updates"):
-            for node in chunk:
-                if on_step and node in STEP_LABELS:
-                    on_step(STEP_LABELS[node])
+            for node, update in chunk.items():
+                label = _label_after(node, update)
+                if on_step and label:
+                    on_step(label)
         values = graph.get_state(cfg).values
     except Exception as exc:  # noqa: BLE001 - the UI must always get an answer
         logger.exception("Turn failed")
