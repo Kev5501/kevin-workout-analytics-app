@@ -110,7 +110,7 @@ def test_core_columns_are_still_required():
 def test_schema_context_tells_the_model_features_are_workout_level():
     ctx = build_schema_context(feature_df(row(rating=4, set_id="a"), row(rating=4, set_id="b")))
     assert "Workout-level columns (Comment, workout_rating" in ctx
-    assert "drop_duplicates('Date')" in ctx and "SELECT DISTINCT Date" in ctx
+    assert "drop_duplicates(subset=['Date','Gym_Day'])" in ctx and "SELECT DISTINCT Date, Gym_Day" in ctx
     assert "workout_rating (Int64)" in ctx
 
 

@@ -59,13 +59,22 @@ def login_screen() -> None:
 def new_chat(df) -> None:
     st.session_state.thread_id = uuid.uuid4().hex
     greeting = build_greeting(df)
+    after = greeting.outro
     if st.session_state.role == access.GUEST:
-        greeting += f"\n\n*Guests can ask {config.GUEST_QUESTION_LIMIT} questions.*"
-    st.session_state.messages = [{"role": "assistant", "content": greeting}]
+        after += f"\n\n*Guests can ask {config.GUEST_QUESTION_LIMIT} questions.*"
+    st.session_state.messages = [{
+        "role": "assistant", "content": greeting.intro,
+        "details_title": greeting.details_title, "details": greeting.details, "content_after": after,
+    }]
 
 
 def show(msg: dict, is_kevin: bool) -> None:
     st.markdown(msg["content"])
+    if msg.get("details"):
+        with st.expander(msg["details_title"]):
+            st.markdown(msg["details"])
+    if msg.get("content_after"):
+        st.markdown(msg["content_after"])
     if msg.get("figure_json"):
         st.plotly_chart(pio.from_json(msg["figure_json"]), use_container_width=True)
     if msg.get("code"):

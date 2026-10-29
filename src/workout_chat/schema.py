@@ -29,6 +29,20 @@ class ColumnDoc:
     kind: str    # friendly type, shown to the user
     short: str   # one-liner for the greeting table
     detail: str  # full description, shown to the LLMs
+    user_detail: str = ""  # friendlier definition for the greeting's workout-level table (falls back to `short`)
+
+
+@dataclass(frozen=True)
+class Greeting:
+    """The opening message in pieces, so the UI can put the workout-level table in a dropdown."""
+    intro: str          # welcome line + table of the set-level columns
+    details_title: str  # dropdown label; "" when the sheet has no workout-level columns
+    details: str        # note + table of the workout-level columns
+    outro: str          # example questions + closing note
+
+    @property
+    def markdown(self) -> str:
+        return "\n\n".join(part for part in (self.intro, self.details, self.outro) if part)
 
 
 DATA_DICTIONARY: tuple[ColumnDoc, ...] = (
@@ -62,40 +76,51 @@ DATA_DICTIONARY: tuple[ColumnDoc, ...] = (
     ColumnDoc("Comment", "text", "Notes on the whole workout",
               "Free-text notes about the workout as a whole, NOT per set: every set from the same workout "
               "shares the same comment. Anything not captured by the other columns lives here (injuries, "
-              "mood or sentiment, form notes, quality of pump, etc.). Sample rows show this column masked."),
+              "mood or sentiment, form notes, quality of pump, etc.). Sample rows show this column masked.",
+              "Kevin's own free-text notes on the whole workout."),
     ColumnDoc("workout_rating", "number (1-5)", "Overall rating of the workout, based on the comment",
               "Overall rating of the workout, inferred from the lifter's comment: 1 = very bad, 2 = bad, "
               "3 = okay, 4 = good, 5 = very good. Missing (null) if the comment had too little information "
-              "to rate the workout or has not been processed yet. Never compare it to the string 'NA'."),
+              "to rate the workout or has not been processed yet. Never compare it to the string 'NA'.",
+              "How the workout went overall: 1 = very bad, 3 = okay, 5 = very good."),
     ColumnDoc("pump_rating", "number (1-3)", "Rating of the pump, based on the comment",
               "How good the lifter's pump was, inferred from the comment: 1 = below average, 2 = average, "
               "3 = above average. Missing (null) if the comment had too little information to rate the pump "
-              "or has not been processed yet. Never compare it to the string 'NA'."),
+              "or has not been processed yet. Never compare it to the string 'NA'.",
+              "How good the pump was: 1 = below average, 2 = average, 3 = above average."),
     ColumnDoc("injury_ind", "yes/no (1/0)", "Had pain, a tweak or an injury",
               "1 if the lifter had pain, a tweak, an injury or joint/muscle discomfort beyond normal training "
-              "soreness, else 0. Missing (null) if the comment has not been processed yet."),
+              "soreness, else 0. Missing (null) if the comment has not been processed yet.",
+              "1 if he had pain, a tweak or an injury; otherwise 0."),
     ColumnDoc("illness_ind", "yes/no (1/0)", "Was ill",
               "1 if the lifter was ill in any way during the workout, else 0. "
-              "Missing (null) if the comment has not been processed yet."),
+              "Missing (null) if the comment has not been processed yet.",
+              "1 if he was sick; otherwise 0."),
     ColumnDoc("girlfriend_ind", "yes/no (1/0)", "Girlfriend was present",
               "1 if the lifter's girlfriend was present during the workout, else 0. "
-              "Missing (null) if the comment has not been processed yet."),
+              "Missing (null) if the comment has not been processed yet.",
+              "1 if his girlfriend was at the workout; otherwise 0."),
     ColumnDoc("fatigue_ind", "yes/no (1/0)", "Felt fatigued or not recovered",
               "1 if the lifter felt tired, fatigued, not recovered, or lacked sleep for the workout, else 0. "
-              "Missing (null) if the comment has not been processed yet."),
+              "Missing (null) if the comment has not been processed yet.",
+              "1 if he felt tired, run down or short on sleep; otherwise 0."),
     ColumnDoc("vacation_ind", "yes/no (1/0)", "Was on vacation",
               "1 if the lifter was on any sort of vacation for the workout, else 0. "
-              "Missing (null) if the comment has not been processed yet."),
+              "Missing (null) if the comment has not been processed yet.",
+              "1 if he was on vacation; otherwise 0."),
     ColumnDoc("form_change_ind", "yes/no (1/0)", "Changed form or technique",
               "1 if the lifter had any change in form, technique or execution of exercises for the workout, else 0. "
-              "Missing (null) if the comment has not been processed yet."),
+              "Missing (null) if the comment has not been processed yet.",
+              "1 if he changed his form or technique; otherwise 0."),
     ColumnDoc("forgot_headphones_ind", "yes/no (1/0)", "Forgot his headphones",
               "1 if the lifter forgot or did not have his headphones for the workout, else 0. "
-              "Missing (null) if the comment has not been processed yet."),
+              "Missing (null) if the comment has not been processed yet.",
+              "1 if he forgot his headphones; otherwise 0."),
     ColumnDoc("other_extenuating_circumstances_ind", "yes/no (1/0)", "Other extenuating circumstances",
               "1 if there were extenuating circumstances for the workout unrelated to injury, illness, fatigue, "
               "vacation, form change or forgetting headphones, else 0. "
-              "Missing (null) if the comment has not been processed yet."),
+              "Missing (null) if the comment has not been processed yet.",
+              "1 if something else unusual affected the workout; otherwise 0."),
 )
 
 _DOC_BY_NAME = {d.name: d for d in DATA_DICTIONARY}
@@ -216,7 +241,19 @@ def router_domain_description() -> str:
 # --------------------------------------------------------------------------
 # Opening message shown before the user types anything
 # --------------------------------------------------------------------------
-def build_greeting(df: pd.DataFrame) -> str:
+def _column_table(df: pd.DataFrame, cols: list[str], last_header: str, describe) -> str:
+    """Markdown table with one row per column; ``describe(doc)`` gives the last cell for a documented column."""
+    rows = [f"| Column | Type | {last_header} |", "|---|---|---|"]
+    for col in cols:
+        doc = _DOC_BY_NAME.get(col)
+        if doc:
+            rows.append(f"| `{col}` | {doc.kind} | {describe(doc)} |")
+        else:
+            rows.append(f"| `{col}` | {_dtype_label(df[col])} | Additional column |")
+    return "\n".join(rows)
+
+
+def build_greeting(df: pd.DataFrame) -> Greeting:
     first, last = df["Date"].min(), df["Date"].max()
     top = df["Exercise"].value_counts().index[0] if df["Exercise"].notna().any() else None
     trend_q = (
@@ -224,13 +261,21 @@ def build_greeting(df: pd.DataFrame) -> str:
         if top else "How has my estimated one-rep max trended over the last 3 months?"
     )
 
-    rows = ["| Column | Type | What it holds |", "|---|---|---|"]
-    for col in df.columns:
-        doc = _DOC_BY_NAME.get(col)
-        if doc:
-            rows.append(f"| `{col}` | {doc.kind} | {doc.short} |")
-        else:
-            rows.append(f"| `{col}` | {_dtype_label(df[col])} | Additional column |")
+    set_level = [c for c in df.columns if c not in WORKOUT_LEVEL_COLUMNS]
+    workout_level = [c for c in df.columns if c in WORKOUT_LEVEL_COLUMNS]
+    set_table = _column_table(df, set_level, "What it holds", lambda doc: doc.short)
+
+    details_title, details = "", ""
+    if workout_level:
+        details_title = "Workout-level columns (from Kevin's notes)"
+        note = "These describe the whole workout, so every set from the same workout shows the same value."
+        if any(c in FEATURE_COLUMNS for c in workout_level):
+            note += (
+                " Apart from `Comment`, they were read from the notes by an AI. "
+                "A blank means the notes didn't say enough to tell."
+            )
+        table = _column_table(df, workout_level, "Definition", lambda doc: doc.user_detail or doc.short)
+        details = f"{note}\n\n{table}"
 
     examples = [
         trend_q,
@@ -239,16 +284,16 @@ def build_greeting(df: pd.DataFrame) -> str:
         "Draw a line chart of Kevin's body weight over the past year.",
         "What days did Kevin mention an injury or pain in his notes?",
     ]
-    return "\n".join([
+    intro = (
         f"Hi! I'm connected to Kevin's workout log: **{_plural(len(df), 'set')}** across "
         f"**{_plural(df['Date'].nunique(), 'workout')}**, "
-        f"from **{_fmt_date(first)}** to **{_fmt_date(last)}**. Each row is one set.",
-        "",
-        "\n".join(rows),
-        "",
+        f"from **{_fmt_date(first)}** to **{_fmt_date(last)}**. Each row is one set.\n\n{set_table}"
+    )
+    outro = "\n".join([
         "**Try asking:**",
         *[f"- {q}" for q in examples],
         "",
         "Follow-up questions work, since I remember this conversation. I'll show the code I ran, add a chart "
         "when it helps, and only answer questions about this workout data.",
     ])
+    return Greeting(intro=intro, details_title=details_title, details=details, outro=outro)

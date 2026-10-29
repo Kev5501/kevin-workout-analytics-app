@@ -1,12 +1,14 @@
 import re
 
 import pandas as pd
+import pytest
 
 from conftest import HEADER, make_row
 from workout_chat import schema
 from workout_chat.data import EXPECTED_COLUMNS, FEATURE_COLUMNS, clean_dataframe
 from workout_chat.schema import (
-    COMMENT_MASK, DATA_DICTIONARY, build_greeting, build_schema_context, router_domain_description,
+    COMMENT_MASK, DATA_DICTIONARY, WORKOUT_LEVEL_COLUMNS, build_greeting, build_schema_context,
+    router_domain_description,
 )
 
 
@@ -78,28 +80,58 @@ def test_router_description_is_short_and_data_free():
 
 
 # ---- greeting ---------------------------------------------------------------
+@pytest.fixture
+def featured_df():
+    """A sheet that has every comment-derived feature column."""
+    rows = [HEADER + list(FEATURE_COLUMNS), make_row() + [4, 2] + [0] * 8]
+    return clean_dataframe(rows)
+
+
 def test_greeting_lists_every_column_and_stats(sample_df):
-    g = build_greeting(sample_df)
+    g = build_greeting(sample_df).markdown
     for col in sample_df.columns:
         assert f"`{col}`" in g
     assert "6 sets" in g and "3 workouts" in g
     assert "Mar 5, 2025" in g and "Mar 14, 2025" in g  # no leading zero on the day
 
 
+def test_greeting_puts_set_level_columns_up_front_and_workout_level_in_the_dropdown(featured_df):
+    g = build_greeting(featured_df)
+    for col in featured_df.columns:
+        in_dropdown = col in WORKOUT_LEVEL_COLUMNS
+        assert (f"`{col}`" in g.details) == in_dropdown, col
+        assert (f"`{col}`" in g.intro) == (not in_dropdown), col
+        assert f"`{col}`" not in g.outro
+
+
+def test_greeting_defines_every_workout_level_column_in_friendly_words(featured_df):
+    for col in WORKOUT_LEVEL_COLUMNS:
+        doc = next(d for d in DATA_DICTIONARY if d.name == col)
+        assert doc.user_detail and len(doc.user_detail) < 100, col
+        assert doc.user_detail in build_greeting(featured_df).details
+        assert "null" not in doc.user_detail.lower() and "NA" not in doc.user_detail, col  # no LLM jargon
+
+
+def test_greeting_dropdown_only_mentions_the_ai_when_feature_columns_exist(sample_df, featured_df):
+    assert "AI" not in build_greeting(sample_df).details
+    assert "AI" in build_greeting(featured_df).details
+
+
 def test_greeting_uses_most_frequent_exercise_in_example(sample_df):
-    assert "estimated one-rep max on Bench Press" in build_greeting(sample_df)
+    assert "estimated one-rep max on Bench Press" in build_greeting(sample_df).outro
 
 
 def test_greeting_never_leaks_comment_text(sample_df):
-    g = build_greeting(sample_df)
+    g = build_greeting(sample_df).markdown
     assert "SECRET" not in g and "great pump" not in g
 
 
 def test_greeting_flags_extra_columns():
     rows = [HEADER + ["Mood_Score"], make_row() + [4]]
-    assert re.search(r"`Mood_Score` \| \w+ \| Additional column", build_greeting(clean_dataframe(rows)))
+    greeting = build_greeting(clean_dataframe(rows))
+    assert re.search(r"`Mood_Score` \| \w+ \| Additional column", greeting.intro)  # set-level, not in the dropdown
 
 
 def test_greeting_singular_wording():
     g = build_greeting(clean_dataframe([HEADER, make_row()]))
-    assert "1 set**" in g and "1 workout**" in g
+    assert "1 set**" in g.intro and "1 workout**" in g.intro

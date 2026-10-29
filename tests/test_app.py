@@ -97,6 +97,15 @@ def test_kevin_gets_in_with_his_password_and_sees_the_greeting(fake_backend):
     assert not any("Guests can ask" in t for t in texts(at))
 
 
+def test_workout_level_columns_are_in_a_collapsed_dropdown(fake_backend):
+    at = login(start(), "Kevin", KEVIN_PW)
+    assert len(at.expander) == 1 and "Workout-level" in at.expander[0].label
+    assert at.expander[0].proto.expanded is False
+    assert any("`Comment`" in m.value for m in at.expander[0].markdown)
+    assert not any("`Comment`" in t and "`Reps`" in t for t in texts(at))      # not in the main table
+    assert any("`Reps`" in t for t in texts(at)) and any("Try asking" in t for t in texts(at))
+
+
 def test_guest_gets_in_with_the_guest_password(fake_backend):
     at = login(start(), "A guest", GUEST_PW)
     assert at.chat_input and "Guest: 0 of 5 questions used" in at.sidebar.caption[0].value
