@@ -1,5 +1,5 @@
 # kevin-workout-analytics-app (aka GainsGPT)
-[click here](https://kevins-gains-gpt.streamlit.app/)
+[website link](https://kevins-gains-gpt.streamlit.app/)
 **Warning: reponses might be slow due to free tier models reasoning/inference times**
 
 
@@ -68,6 +68,17 @@ flowchart LR
 5. **Synthesize**: the answer model turns the execution result into the final reply.
 
 Each step uses an ordered model chain from [models.toml](models.toml). If a model hits a rate limit or outage, or its API key is missing, the next one is tried. Conversation memory is kept per thread by a LangGraph checkpointer.
+
+## Example Chat
+
+**Initial Question**
+
+<img width="745" height="402" alt="image" src="https://github.com/user-attachments/assets/70581bf7-c7cd-4150-9579-42cd88faee79" />
+
+**Follow-up Question**
+
+<img width="663" height="795" alt="image" src="https://github.com/user-attachments/assets/ae584fea-f078-452b-9fb2-af414bc7715f" />
+<img width="615" height="530" alt="image" src="https://github.com/user-attachments/assets/4ad2f6f0-524d-47e6-8d6c-f1880b63afef" />
 
 ## Repo Layout
 
