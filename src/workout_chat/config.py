@@ -20,7 +20,7 @@ MODELS_FILE = ROOT / "models.toml"
 # --------------------------------------------------------------------------
 # Constants
 # --------------------------------------------------------------------------
-SHEET_WORKSHEET = "Cleaned_Data"
+SHEET_WORKSHEET = "Enriched_Data"
 SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 DATA_CACHE_TTL_SECONDS = 600
 
