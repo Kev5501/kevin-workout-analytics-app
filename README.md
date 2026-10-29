@@ -1,6 +1,6 @@
 # kevin-workout-analytics-app (aka GainsGPT)
 [website link](https://kevins-gains-gpt.streamlit.app/)
-**Warning: reponses might be slow due to free tier models reasoning/inference times**
+**Warning: responses might be slow due to free-tier models' reasoning/inference times**
 
 
 Hello, this repo is a Streamlit app that lets you generate insights from my workout logs in natural language! Ask a question like "How much did Kevin Bench last week?" and a LangGraph flow will route your question to an approrpiate tool, write code against the data, run it in a sandbox, and synthesize the results to answer your question.
@@ -12,7 +12,7 @@ The base data is a Google Sheet with basic (exercise, weight, reps, RPE, etc.) a
 - **Free (mostly...)**: Streamlit Community Cloud for app deployment, Gemini and OpenRouter API's for inference, and guest usage is capped (sorry lol).
 - **Nothing running locally**: Deployment and inference need to always be available.
 - **Faithful to data**: numbers come from executed code on dataset, not from the model's memory.
-- ** Purpose-built **: Use Jev-like router models to ensure questions are only pertaining to my workout logs and nothing else.
+- **Purpose-built**: Use Jev-like router models to ensure questions pertain only to my workout logs and nothing else.
 - **Basic safety for LLM generated code execution**: SQL is read-only, and Python runs in an isolated process with no imports, files, or network access.
 - **Keep personal data personal**: free-text `Comment` values are masked from models.
 - **Quality of life chat features**: short term memory for follow-up questions.
@@ -73,12 +73,12 @@ Each step uses an ordered model chain from [models.toml](models.toml). If a mode
 
 **Initial Question**
 
-<img width="745" height="402" alt="image" src="https://github.com/user-attachments/assets/70581bf7-c7cd-4150-9579-42cd88faee79" />
+<img width="700" height="402" alt="image" src="https://github.com/user-attachments/assets/70581bf7-c7cd-4150-9579-42cd88faee79" />
 
 **Follow-up Question**
 
 <img width="663" height="795" alt="image" src="https://github.com/user-attachments/assets/ae584fea-f078-452b-9fb2-af414bc7715f" />
-<img width="615" height="530" alt="image" src="https://github.com/user-attachments/assets/4ad2f6f0-524d-47e6-8d6c-f1880b63afef" />
+<img width="663" height="530" alt="image" src="https://github.com/user-attachments/assets/4ad2f6f0-524d-47e6-8d6c-f1880b63afef" />
 
 ## Repo Layout
 
