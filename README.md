@@ -3,21 +3,21 @@
 **Warning: reponses might be slow due to free tier models reasoning/inference times**
 
 
-Hello, this repo is a Streamlit app that lets you generate insights from my workout logs in natural language! Ask a question like "How much did Kevin Bench last week?" and an LangGraph flow will route your question to an approrpiate tool, write code against the data, run it in a sandbox, and synthesize the results to answers your question.
+Hello, this repo is a Streamlit app that lets you generate insights from my workout logs in natural language! Ask a question like "How much did Kevin Bench last week?" and a LangGraph flow will route your question to an approrpiate tool, write code against the data, run it in a sandbox, and synthesize the results to answer your question.
 
-The base data is a Google Sheet with basic (exercise, weight, reps, RPE, etc.) and LLM enriched (workout_rating, injury_ind, etc.) information about all my workouts since I started this project.
+The base data is a Google Sheet with basic (exercise, weight, reps, RPE, etc.) and LLM-enriched (workout_rating, injury_ind, etc.) information about all my workouts since I started this project.
 
 ## Requirements
 
-- **Free (mostly...)**: Streamlit Community Cloud for app deployment, Gemeini and OpenRouter API's for inference, and guest usage is capped (sorry lol).
+- **Free (mostly...)**: Streamlit Community Cloud for app deployment, Gemini and OpenRouter API's for inference, and guest usage is capped (sorry lol).
 - **Nothing running locally**: Deployment and inference need to always be available.
 - **Faithful to data**: numbers come from executed code on dataset, not from the model's memory.
-- **Purpose built**: Use Jev-like router models to ensure questions are only pertaining to my workout logs and nothing else.
+- ** Purpose-built **: Use Jev-like router models to ensure questions are only pertaining to my workout logs and nothing else.
 - **Basic safety for LLM generated code execution**: SQL is read-only, and Python runs in an isolated process with no imports, files, or network access.
 - **Keep personal data personal**: free-text `Comment` values are masked from models.
 - **Quality of life chat features**: short term memory for follow-up questions.
 - **Streamlined swapping of models**: change which model does which job by editing one TOML file, with no code changes.
-- **Easily expandale**: Tools can easily be added later on to increase the functionality of the app.
+- **Easily expandable**: Tools can easily be added later on to increase the functionality of the app.
 
 ## Architecture
 
