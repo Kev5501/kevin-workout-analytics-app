@@ -77,7 +77,7 @@ Each step uses an ordered model chain from [models.toml](models.toml). If a mode
 
 **Follow-up Question**
 
-<img width="663" height="795" alt="image" src="https://github.com/user-attachments/assets/ae584fea-f078-452b-9fb2-af414bc7715f" />
+<img width="663" height="794" alt="image" src="https://github.com/user-attachments/assets/8dd47217-78cc-444a-a73d-d99160c52992" />
 <img width="663" height="530" alt="image" src="https://github.com/user-attachments/assets/4ad2f6f0-524d-47e6-8d6c-f1880b63afef" />
 
 ## Repo Layout
