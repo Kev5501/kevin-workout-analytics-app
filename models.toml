@@ -22,15 +22,15 @@ model = "gemini-3.8-flash"
 provider = "google_genai"
 model = "gemini-3.5-flash-lite"
 
-[models.mammoth_1_free]
+[models.microsoft_decision_1]
 kind = "decision"
 provider = "openrouter"
-model = "baseten/mammoth-1:free"
+model = "microsoft/microsoft-decision-1"
 
-[models.span_01_free]
+[models.jev]
 kind = "decision"
 provider = "openrouter"
-model = "respan/span-01-lite:free"
+model = "typesafe/jev-1.14"
 
 [models.north_mini_code_free]
 provider = "openrouter"
@@ -38,7 +38,7 @@ model = "cohere/north-mini-code:free"
 
 # ---- which model does which job ------------------------------------------
 [nodes]
-router      = ["mammoth_1_free", "span_01_free"]                # classify the question (structured output)
+router      = ["microsoft_decision_1","jev"]                # classify the question (structured output)
 rewriter    = ["gemini_flash", "gemini_flash_lite"]  # standalone follow-up rewrite + clarifying question text
 coder       = ["north_mini_code_free", "gemini_flash"]   # writes the SQL / Python
 synthesizer = ["gemini_flash", "gemini_flash_lite"]  # turns results into the final answer

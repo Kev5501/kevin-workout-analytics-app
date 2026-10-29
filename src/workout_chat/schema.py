@@ -189,8 +189,8 @@ def build_schema_context(df: pd.DataFrame, n_samples: int = 5, max_values: int =
     lines += [
         "",
         f"Workout-level columns ({', '.join(workout_level)}): every set in a workout repeats the same value, and "
-        "one workout = one Date. To count or average across WORKOUTS, first keep one row per Date "
-        f"(pandas: {DF_NAME}.drop_duplicates('Date'); SQL: SELECT DISTINCT Date, <column> FROM {SQL_TABLE_NAME}). "
+        "one workout = a unique Date and Gym_Day combination. To count or average across WORKOUTS, first keep one row per unique Date/Gym_Day combination "
+        f"(pandas: {DF_NAME}.drop_duplicates(subset=['Date','Gym_Day']); SQL: SELECT DISTINCT Date, Gym_Day <column> FROM {SQL_TABLE_NAME}). "
         "Using every row instead would weight each workout by its number of sets.",
     ]
 
