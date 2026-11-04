@@ -74,7 +74,7 @@ def df():
 
 def test_truth_functions_match_hand_calculated_values(df):
     assert TRUTH["total_sets"](df).numbers == [4]
-    assert TRUTH["workout_count"](df).numbers == [2]
+    assert TRUTH["workout_count"](df).numbers == [3]                   # 03-05 holds two workouts (Push and Legs)
     assert TRUTH["top_exercise"](df).words == ["Bench Press"]
     assert TRUTH["heaviest_weight"](df).numbers == [300.0]
     assert TRUTH["heaviest_exercise"](df).words == ["Squat"]
@@ -88,8 +88,24 @@ def test_truth_functions_match_hand_calculated_values(df):
 
 
 def test_busiest_gym_day_counts_workouts_not_sets(df):
-    # Push has 3 sets in 2 workouts (03-05 starts with a Push set); Legs has 1 set -> by workout, still Push
+    # Push: 3 sets in 2 workouts (03-05 and 03-12); Legs: 1 set in 1 workout (03-05) -> by workout, Push
     assert TRUTH["busiest_gym_day"](df).words == ["Push"]
+
+
+def test_two_gym_days_on_one_date_are_two_workouts():
+    header = list(EXPECTED_COLUMNS)
+    pad = [""] * 10
+    injured = [3, 2, 1, 0, 0, 0, 0, 0, 0, 0]  # workout_rating 3, pump_rating 2, injury_ind 1
+    rows = [
+        make_row("2025-03-05", "a", day="Push", ex="Bench Press") + injured,
+        make_row("2025-03-05", "b", day="Legs", ex="Squat") + injured,
+        make_row("2025-03-05", "c", day="Legs", ex="Squat") + injured,
+        make_row("2025-03-06", "d", day="Legs", ex="Squat") + pad,
+    ]
+    frame = clean_dataframe([header, *rows])
+    assert TRUTH["workout_count"](frame).numbers == [3]               # not 2 dates
+    assert TRUTH["injury_workouts"](frame).numbers == [2]             # Push and Legs on 03-05, not 1 date
+    assert TRUTH["busiest_gym_day"](frame).words == ["Legs"]          # Legs: 2 workouts, Push: 1
 
 
 def test_cases_needing_missing_columns_are_declared():

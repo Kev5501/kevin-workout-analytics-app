@@ -97,3 +97,44 @@ def test_extra_nodes_are_loaded_and_validated(tmp_path):
     assert cfg.nodes["generate_sql_code"] == ("b", "a")
     with pytest.raises(ConfigError, match="ghost"):
         load_model_config(write_toml(tmp_path, extra='generate_sql_code = ["ghost"]\n'))
+
+
+def test_reasoning_defaults(tmp_path):
+    cfg = load_model_config(write_toml(tmp_path))
+    assert cfg.settings["coder_reasoning_effort"] == "low"
+    assert cfg.settings["escalate_reasoning_on_retry"] is True
+
+
+def test_repo_models_toml_reasoning_effort_is_a_known_level():
+    assert load_model_config().settings["coder_reasoning_effort"] in config.REASONING_LEVELS
+
+
+def test_invalid_reasoning_effort_is_rejected(tmp_path):
+    path = write_toml(tmp_path)
+    path.write_text('[settings]\ncoder_reasoning_effort = "extreme"\n' + path.read_text())
+    with pytest.raises(ConfigError, match="coder_reasoning_effort"):
+        load_model_config(path)
+
+
+@pytest.mark.parametrize("effort,steps,expected", [
+    ("low", 0, "low"), ("low", 1, "medium"), ("low", 2, "high"), ("low", 5, "high"),
+    ("minimal", 1, "low"), ("minimal", 2, "medium"), ("high", 1, "high"),
+])
+def test_escalate_reasoning(effort, steps, expected):
+    assert config.escalate_reasoning(effort, steps) == expected
+
+
+def test_send_reasoning_effort_is_a_model_flag_not_a_provider_param(tmp_path):
+    models = (
+        '[models.a]\nprovider = "openrouter"\nmodel = "x"\nsend_reasoning_effort = false\n'
+        '[models.b]\nprovider = "openrouter"\nmodel = "y"\n'
+    )
+    cfg = load_model_config(write_toml(tmp_path, models=models, nodes={n: ["a"] for n in config.NODE_NAMES}))
+    assert cfg.models["a"].send_reasoning_effort is False and cfg.models["a"].params == {}
+    assert cfg.models["b"].send_reasoning_effort is True
+
+
+def test_send_reasoning_effort_must_be_a_bool(tmp_path):
+    models = '[models.a]\nprovider = "openrouter"\nmodel = "x"\nsend_reasoning_effort = "no"\n'
+    with pytest.raises(ConfigError, match="send_reasoning_effort"):
+        load_model_config(write_toml(tmp_path, models=models))

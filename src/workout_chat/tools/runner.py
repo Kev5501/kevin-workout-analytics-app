@@ -9,7 +9,7 @@ from typing import Callable
 import pandas as pd
 
 from .. import llm, prompts
-from ..config import ConfigError
+from ..config import ConfigError, escalate_reasoning
 from ..llm import AllModelsFailed, text_of
 from ..sandbox import SandboxResult
 from .base import ToolContext
@@ -59,6 +59,8 @@ def extract_code(text: str, labels: tuple[str, ...]) -> str:
 def generate_and_run(ctx: ToolContext, lang: CodeLanguage, question: str, needs_chart: bool = False) -> ToolOutcome:
     max_attempts = int(ctx.settings.get("max_code_retries", 2)) + 1
     system = lang.system_prompt(ctx, needs_chart)
+    base_effort = ctx.settings.get("coder_reasoning_effort", "low")
+    escalate = ctx.settings.get("escalate_reasoning_on_retry", True)
     previous_code, previous_error = "", ""
     failures: list[str] = []
     model_key = None
@@ -70,8 +72,11 @@ def generate_and_run(ctx: ToolContext, lang: CodeLanguage, question: str, needs_
             )
         else:
             human = prompts.CODE_FIRST.format(question=question)
+        effort = escalate_reasoning(base_effort, attempt - 1) if escalate else base_effort  # a retry means it was harder
         try:
-            reply = llm.invoke_chat(lang.node, [("system", system), ("human", human)], default_node="coder", config=ctx.config)
+            reply = llm.invoke_chat(
+                lang.node, [("system", system), ("human", human)], default_node="coder", effort=effort, config=ctx.config
+            )
         except AllModelsFailed as exc:
             return ToolOutcome(False, error=exc.user_message, attempts=attempt - 1, llm_failed=True,
                                language=lang.name, history=failures)

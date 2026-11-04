@@ -62,6 +62,27 @@ def test_gives_up_after_max_retries(ctx, monkeypatch):
     assert out.error and out.code and len(out.history) == 3 and not out.llm_failed
 
 
+def efforts_used(tmp_path, sample_df, monkeypatch, settings=""):
+    ctx = ToolContext.from_df(sample_df, write_cfg(tmp_path, settings))
+    fake = patch_llm(monkeypatch, {"generate_sql_code": "```sql\nSELECT nope FROM workouts\n```"})
+    generate_and_run(ctx, SQL, "q")
+    return [c["effort"] for c in fake.calls]
+
+
+def test_reasoning_starts_low_and_escalates_on_each_retry(tmp_path, sample_df, monkeypatch):
+    assert efforts_used(tmp_path, sample_df, monkeypatch) == ["low", "medium", "high"]
+
+
+def test_reasoning_stays_static_when_escalation_is_off(tmp_path, sample_df, monkeypatch):
+    settings = "escalate_reasoning_on_retry = false"
+    assert efforts_used(tmp_path, sample_df, monkeypatch, settings) == ["low", "low", "low"]
+
+
+def test_reasoning_escalates_from_a_configured_base(tmp_path, sample_df, monkeypatch):
+    settings = 'coder_reasoning_effort = "minimal"'
+    assert efforts_used(tmp_path, sample_df, monkeypatch, settings) == ["minimal", "low", "medium"]
+
+
 def test_reply_without_code_counts_as_a_failed_attempt(ctx, monkeypatch):
     patch_llm(monkeypatch, {"generate_sql_code": ["", "```sql\nSELECT 1 AS one\n```"]})
     out = generate_and_run(ctx, SQL, "q")
@@ -93,6 +114,17 @@ def test_blocked_python_is_retried_like_any_error(ctx, monkeypatch):
     fake = patch_llm(monkeypatch, {"generate_python_code": ["```python\nimport os\nresult = 1\n```", "```python\nresult = 2\n```"]})
     out = generate_and_run(ctx, PYTHON, "q")
     assert out.ok and out.attempts == 2 and "Imports are not allowed" in fake.calls[1]["human"]
+
+
+def test_prompts_define_a_workout_as_a_date_and_gym_day_pair(ctx, monkeypatch):
+    sql = patch_llm(monkeypatch, {"generate_sql_code": "```sql\nSELECT 1\n```"})
+    generate_and_run(ctx, SQL, "q")
+    assert "SELECT DISTINCT Date, Gym_Day, <column>" in sql.calls[0]["system"]
+    py = patch_llm(monkeypatch, {"generate_python_code": "```python\nresult = 1\n```"})
+    generate_and_run(ctx, PYTHON, "q")
+    assert "drop_duplicates(['Date', 'Gym_Day'])" in py.calls[0]["system"]
+    for call in (sql.calls[0], py.calls[0]):
+        assert "drop_duplicates('Date')" not in call["system"]
 
 
 def test_prompt_contains_schema_dates_and_kevin(ctx, monkeypatch):

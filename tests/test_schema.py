@@ -135,3 +135,26 @@ def test_greeting_flags_extra_columns():
 def test_greeting_singular_wording():
     g = build_greeting(clean_dataframe([HEADER, make_row()]))
     assert "1 set**" in g.intro and "1 workout**" in g.intro
+
+
+# ---- one workout = a Date + Gym_Day pair --------------------------------------------
+@pytest.fixture
+def double_day_df():
+    """3 dates, 4 workouts: 03-05 holds two workouts (Push and Legs)."""
+    return clean_dataframe([
+        HEADER,
+        make_row("2025-03-05", "a", day="Push"),
+        make_row("2025-03-05", "b", day="Legs", ex="Squat"),
+        make_row("2025-03-06", "c", day="Push"),
+        make_row("2025-03-07", "d", day="Legs", ex="Squat"),
+    ])
+
+
+def test_workout_count_counts_date_gym_day_pairs(double_day_df):
+    assert double_day_df["Date"].nunique() == 3
+    assert schema.workout_count(double_day_df) == 4
+
+
+def test_context_and_greeting_count_workouts_as_date_gym_day_pairs(double_day_df):
+    assert "Workouts (unique Date + Gym_Day pairs): 4" in build_schema_context(double_day_df)
+    assert "4 workouts" in build_greeting(double_day_df).markdown

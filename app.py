@@ -11,7 +11,7 @@ import streamlit as st  # noqa: E402
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 
 from workout_chat import access, config, data, graph as graph_module  # noqa: E402
-from workout_chat.schema import build_greeting  # noqa: E402
+from workout_chat.schema import build_greeting, workout_count  # noqa: E402
 
 st.set_page_config(page_title="Kevin's Workout Chat", page_icon="🏋️", layout="centered")
 
@@ -111,7 +111,7 @@ with st.sidebar:
         st.caption("Signed in as Kevin (no question limit)")
     else:
         st.caption(f"Guest: {st.session_state.questions_asked} of {config.GUEST_QUESTION_LIMIT} questions used")
-    st.caption(f"{len(df):,} sets · {df['Date'].nunique():,} workouts · loaded {df.attrs.get('loaded_at', '')[:16].replace('T', ' ')} UTC")
+    st.caption(f"{len(df):,} sets · {workout_count(df):,} workouts · loaded {df.attrs.get('loaded_at', '')[:16].replace('T', ' ')} UTC")
     if st.button("New chat"):
         new_chat(df)
         st.rerun()

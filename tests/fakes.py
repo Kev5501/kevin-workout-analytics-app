@@ -49,13 +49,14 @@ class FakeLLM:
     def __init__(self, replies):
         self.replies, self.calls = dict(replies), []
 
-    def __call__(self, node, messages, *, schema=None, default_node=None, config=None):
+    def __call__(self, node, messages, *, schema=None, default_node=None, effort=None, config=None):
         system = messages[0][1] if isinstance(messages[0], tuple) else str(messages[0].content)
         human = messages[-1][1] if isinstance(messages[-1], tuple) else str(messages[-1].content)
         kind = node
         if node == "rewriter":
             kind = "clarify" if "clarifying" in system else "rewrite"
-        self.calls.append({"node": node, "kind": kind, "system": system, "human": human, "default_node": default_node})
+        self.calls.append({"node": node, "kind": kind, "system": system, "human": human, "default_node": default_node,
+                           "effort": effort})
         reply = self.replies.get(kind, self.replies.get(default_node or "", ""))
         if isinstance(reply, Exception):
             raise reply

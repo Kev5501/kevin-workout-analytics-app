@@ -99,12 +99,22 @@ NODE_NAMES = ("router", "rewriter", "coder", "synthesizer")
 # "decision" = typed-question decision model (JSON in, JSON out, e.g. mercury-decide)
 MODEL_KINDS = ("chat", "decision")
 
+# Reasoning effort levels, most thinking first (OpenRouter's `reasoning.effort` values).
+REASONING_LEVELS = ("high", "medium", "low", "minimal")
+
 DEFAULT_SETTINGS: dict[str, Any] = {
     "temperature": 0.0,
     "max_code_retries": 2,
     "history_turns": 6,
     "router_confidence_threshold": 0.5,
+    "coder_reasoning_effort": "low",
+    "escalate_reasoning_on_retry": True,
 }
+
+
+def escalate_reasoning(effort: str, steps: int) -> str:
+    """The effort ``steps`` levels above ``effort`` on REASONING_LEVELS, stopping at the highest."""
+    return REASONING_LEVELS[max(REASONING_LEVELS.index(effort) - steps, 0)]
 
 
 @dataclass(frozen=True)
@@ -114,6 +124,7 @@ class ModelSpec:
     model: str
     kind: str
     params: dict[str, Any]
+    send_reasoning_effort: bool = True   # False = never send the coder's reasoning effort to this model
 
 
 @dataclass(frozen=True)
@@ -141,6 +152,11 @@ def load_model_config(path: Path | str = MODELS_FILE) -> ModelConfig:
         raw = tomllib.load(fh)
 
     settings = {**DEFAULT_SETTINGS, **raw.get("settings", {})}
+    if settings["coder_reasoning_effort"] not in REASONING_LEVELS:
+        raise ConfigError(
+            f"[settings] coder_reasoning_effort '{settings['coder_reasoning_effort']}' is not valid. "
+            f"Use one of: {', '.join(REASONING_LEVELS)}"
+        )
 
     models: dict[str, ModelSpec] = {}
     for key, entry in raw.get("models", {}).items():
@@ -155,8 +171,11 @@ def load_model_config(path: Path | str = MODELS_FILE) -> ModelConfig:
         kind = entry.get("kind", "chat")
         if kind not in MODEL_KINDS:
             raise ConfigError(f"[models.{key}] has unknown kind '{kind}'. Known kinds: {', '.join(MODEL_KINDS)}")
-        params = {k: v for k, v in entry.items() if k not in ("provider", "model", "kind")}
-        models[key] = ModelSpec(key, entry["provider"], entry["model"], kind, params)
+        send_effort = entry.get("send_reasoning_effort", True)
+        if not isinstance(send_effort, bool):
+            raise ConfigError(f"[models.{key}] send_reasoning_effort must be true or false")
+        params = {k: v for k, v in entry.items() if k not in ("provider", "model", "kind", "send_reasoning_effort")}
+        models[key] = ModelSpec(key, entry["provider"], entry["model"], kind, params, send_effort)
 
     nodes_raw = raw.get("nodes", {})
     for node in NODE_NAMES:

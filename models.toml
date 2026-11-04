@@ -1,13 +1,14 @@
 # One place to choose which model does each job.
 # Each node lists model keys in priority order: the first is tried first, the rest
 # are fallbacks. A model is skipped automatically if its API key secret is missing.
-# To change a model for any step, edit a line in [nodes] (or add a [models.*] entry).
 
 [settings]
 temperature = 0.0
 max_code_retries = 2              # coder <-> executor retry loop
 history_turns = 6                 # past Q&A turns kept in session memory
 router_confidence_threshold = 0.5 # Decider under this confidence below this -> ask a clarifying question
+coder_reasoning_effort = "low"    # coder's thinking budget: "high" | "medium" | "low" | "minimal" (OpenRouter models only)
+escalate_reasoning_on_retry = true # each coder retry raises the effort one level (low -> medium -> high)
 
 # ---- model registry -------------------------------------------------------
 # provider: "google_genai" | "openrouter"
@@ -35,10 +36,22 @@ model = "typesafe/jev-1.14"
 [models.north_mini_code_free]
 provider = "openrouter"
 model = "cohere/north-mini-code:free"
+max_tokens = 6000  
+
+[models.nemotron_ultra_free]
+provider = "openrouter"
+model = "nvidia/nemotron-3-ultra-550b-a55b:free"
+send_reasoning_effort = false   # run it with no extra request params (no reasoning setting, no max_tokens)
+
+[models.nemotron_super_free]
+provider = "openrouter"
+model = "nvidia/nemotron-3.5-super-vl:free"
+send_reasoning_effort = false   # run it with no extra request params (no reasoning setting, no max_tokens)
+
 
 # ---- which model does which job ------------------------------------------
 [nodes]
 router      = ["microsoft_decision_1","jev"]                # classify the question (structured output)
 rewriter    = ["gemini_flash", "gemini_flash_lite"]  # standalone follow-up rewrite + clarifying question text
-coder       = ["north_mini_code_free", "gemini_flash"]   # writes the SQL / Python
+coder       = ["nemotron_ultra_free", "nemotron_super_free", "gemini_flash_lite"]   # writes the SQL / Python
 synthesizer = ["gemini_flash", "gemini_flash_lite"]  # turns results into the final answer

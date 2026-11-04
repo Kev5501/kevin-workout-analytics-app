@@ -100,8 +100,12 @@ def clear_model_cache() -> None:
     _MODEL_CACHE.clear()
 
 
-def build_chat_model(spec: ModelSpec, settings: dict[str, Any]) -> Any:
-    """Create (or reuse) the LangChain chat model for ``spec``."""
+def build_chat_model(spec: ModelSpec, settings: dict[str, Any], effort: str | None = None) -> Any:
+    """Create (or reuse) the LangChain chat model for ``spec``.
+
+    ``effort`` is a reasoning level (config.REASONING_LEVELS). It is sent to OpenRouter models only; the Gemini
+    models ignore it because their thinking parameter differs by model version.
+    """
     if spec.kind != "chat":
         raise ConfigError(f"Model '{spec.key}' has kind '{spec.kind}', not 'chat'.")
 
@@ -111,6 +115,10 @@ def build_chat_model(spec: ModelSpec, settings: dict[str, Any]) -> Any:
         "timeout": REQUEST_TIMEOUT_SECONDS,
     }
     kwargs.update(spec.params)  # models.toml extras win (e.g. a per-model temperature)
+    if effort and spec.provider == "openrouter" and spec.send_reasoning_effort:
+        extra_body = dict(kwargs.get("extra_body") or {})
+        extra_body["reasoning"] = {**extra_body.get("reasoning", {}), "effort": effort}
+        kwargs["extra_body"] = extra_body
 
     cache_key = (spec.key, spec.provider, spec.model, json.dumps(kwargs, sort_keys=True, default=str))
     if cache_key in _MODEL_CACHE:
@@ -148,14 +156,21 @@ def text_of(message: Any) -> str:
     return str(content)
 
 
-def call_chat_model(spec: ModelSpec, messages: Any, *, schema: Any = None, settings: dict[str, Any] | None = None) -> Any:
+def call_chat_model(
+    spec: ModelSpec,
+    messages: Any,
+    *,
+    schema: Any = None,
+    settings: dict[str, Any] | None = None,
+    effort: str | None = None,
+) -> Any:
     """Call ONE chat model. Returns an AIMessage, or a ``schema`` instance when ``schema`` is given.
 
     Any failure is raised as ModelCallError so callers can fall back to the next model.
     """
     settings = settings if settings is not None else get_model_config().settings
     try:
-        model = build_chat_model(spec, settings)
+        model = build_chat_model(spec, settings, effort)
         runnable = model.with_structured_output(schema) if schema is not None else model
         result = runnable.invoke(messages)
     except ConfigError:
@@ -180,12 +195,14 @@ def invoke_chat(
     *,
     schema: Any = None,
     default_node: str | None = None,
+    effort: str | None = None,
     config: ModelConfig | None = None,
 ) -> ChatResult:
     """Run ``messages`` through the chat models configured for ``node``, in priority order.
 
     ``default_node`` lets a tool use its own chain when models.toml defines one, and
-    otherwise share another node's (e.g. generate_sql_code -> coder).
+    otherwise share another node's (e.g. generate_sql_code -> coder). ``effort`` is the reasoning level
+    to request from models that support it (see build_chat_model).
     """
     cfg = config or get_model_config()
     chain_node = node if node in cfg.nodes else default_node
@@ -199,7 +216,7 @@ def invoke_chat(
     failures: list[ModelCallError] = []
     for spec in specs:
         try:
-            value = call_chat_model(spec, messages, schema=schema, settings=cfg.settings)
+            value = call_chat_model(spec, messages, schema=schema, settings=cfg.settings, effort=effort)
             return ChatResult(value, spec.key, tuple(failures))
         except ModelCallError as err:
             logger.warning("Model call failed (node=%s): %s", node, err)

@@ -48,7 +48,8 @@ Rules
   DATE '2025-01-31' or CURRENT_DATE - INTERVAL 30 DAY for relative periods.
 - Give returned columns clear aliases (AS). Round decimals with ROUND(x, 1). For lists use ORDER BY and LIMIT 50 at most.
 - Weights are in lbs. "Volume" means SUM(Weight * Reps). Estimated one-rep max is the RPE_Norm_Weight column.
-- Workout-level columns need one row per workout: SELECT DISTINCT Date, <column> FROM {table} before aggregating.
+- A workout is one unique Date + Gym_Day pair (Kevin can do two workouts on the same day). Workout-level columns
+  need one row per workout: SELECT DISTINCT Date, Gym_Day, <column> FROM {table} before counting or aggregating.
 
 {schema}"""
 
@@ -64,7 +65,8 @@ Rules
 - Today's date is {today}; Kevin's most recent workout in the data is {latest}. `Date` is datetime64: compare
   with pd.Timestamp(...) and use .dt for parts.
 - Weights are in lbs. "Volume" means Weight * Reps summed. Estimated one-rep max is the RPE_Norm_Weight column.
-- Workout-level columns need one row per workout: use df.drop_duplicates('Date') before counting or averaging.
+- A workout is one unique Date + Gym_Day pair (Kevin can do two workouts on the same day). Workout-level columns
+  need one row per workout: use df.drop_duplicates(['Date', 'Gym_Day']) before counting or averaging.
 - Use the exact column names and exact category spellings listed below.
 
 Example of the expected shape (adapt it):

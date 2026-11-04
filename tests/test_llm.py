@@ -99,6 +99,55 @@ def test_build_openrouter_model_uses_base_url_and_title_header(tmp_path, monkeyp
     assert seen["default_headers"]["X-OpenRouter-Title"] == llm.APP_TITLE
 
 
+def test_openrouter_gets_reasoning_effort(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(llm, "ChatOpenAI", lambda **kw: seen.update(kw) or object())
+    cfg = make_cfg(tmp_path, CORE)
+    llm.build_chat_model(cfg.models["o1"], {"temperature": 0.0}, "low")
+    assert seen["extra_body"] == {"reasoning": {"effort": "low"}}
+
+
+def test_reasoning_effort_keeps_existing_extra_body(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(llm, "ChatOpenAI", lambda **kw: seen.update(kw) or object())
+    spec = config.ModelSpec("o2", "openrouter", "or/two", "chat", {"extra_body": {"reasoning": {"max_tokens": 50}, "x": 1}})
+    llm.build_chat_model(spec, {}, "high")
+    assert seen["extra_body"] == {"reasoning": {"max_tokens": 50, "effort": "high"}, "x": 1}
+    assert spec.params["extra_body"]["reasoning"] == {"max_tokens": 50}  # the config itself is not mutated
+
+
+def test_model_can_opt_out_of_reasoning_effort(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(llm, "ChatOpenAI", lambda **kw: seen.update(kw) or object())
+    spec = config.ModelSpec("o3", "openrouter", "or/three", "chat", {}, send_reasoning_effort=False)
+    llm.build_chat_model(spec, {}, "low")
+    assert "extra_body" not in seen
+
+
+def test_no_effort_sends_no_reasoning_param(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(llm, "ChatOpenAI", lambda **kw: seen.update(kw) or object())
+    cfg = make_cfg(tmp_path, CORE)
+    llm.build_chat_model(cfg.models["o1"], {"temperature": 0.0})
+    assert "extra_body" not in seen
+
+
+def test_google_models_ignore_effort(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(llm, "ChatGoogleGenerativeAI", lambda **kw: seen.update(kw) or object())
+    cfg = make_cfg(tmp_path, CORE)
+    llm.build_chat_model(cfg.models["g1"], {"temperature": 0.0}, "low")
+    assert "extra_body" not in seen and "reasoning" not in seen
+
+
+def test_each_effort_gets_its_own_cached_model(tmp_path, monkeypatch):
+    monkeypatch.setattr(llm, "ChatOpenAI", lambda **kw: object())
+    cfg = make_cfg(tmp_path, CORE)
+    low = llm.build_chat_model(cfg.models["o1"], {"temperature": 0.0}, "low")
+    assert low is llm.build_chat_model(cfg.models["o1"], {"temperature": 0.0}, "low")
+    assert low is not llm.build_chat_model(cfg.models["o1"], {"temperature": 0.0}, "high")
+
+
 def test_models_are_cached(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(llm, "ChatGoogleGenerativeAI", lambda **kw: calls.append(1) or object())
@@ -137,7 +186,7 @@ class FakeModel:
 
 
 def patch_models(monkeypatch, by_key):
-    monkeypatch.setattr(llm, "build_chat_model", lambda spec, settings: by_key[spec.key])
+    monkeypatch.setattr(llm, "build_chat_model", lambda spec, settings, effort=None: by_key[spec.key])
 
 
 def test_invoke_chat_falls_back_and_records_failures(tmp_path, monkeypatch):
@@ -146,6 +195,15 @@ def test_invoke_chat_falls_back_and_records_failures(tmp_path, monkeypatch):
     res = invoke_chat("coder", [("human", "hi")], config=cfg)
     assert res.value == "hello" and res.model_key == "g1"
     assert [f.model_key for f in res.failures] == ["o1"] and res.failures[0].kind == "rate_limit"
+
+
+def test_invoke_chat_passes_effort_to_every_model_tried(tmp_path, monkeypatch):
+    cfg = make_cfg(tmp_path, CORE)
+    efforts = []
+    models = {"o1": FakeModel(Err("slow down", 429)), "g1": FakeModel("hello")}
+    monkeypatch.setattr(llm, "build_chat_model", lambda spec, settings, effort=None: efforts.append(effort) or models[spec.key])
+    invoke_chat("coder", "hi", effort="medium", config=cfg)
+    assert efforts == ["medium", "medium"]
 
 
 def test_invoke_chat_uses_first_model_when_it_works(tmp_path, monkeypatch):

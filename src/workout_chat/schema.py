@@ -19,6 +19,17 @@ MASKED_COLUMNS = ("Comment",)   # never shown to a model in sample rows
 CATEGORICAL_COLUMNS = ("Gym_Day", "Type", "Exercise")  # exact values are listed for the coder
 # Values repeated on every set of a workout (Comment and the features derived from it).
 WORKOUT_LEVEL_COLUMNS = ("Comment", *FEATURE_COLUMNS)
+# One workout = a unique Date + Gym_Day pair (Kevin can do two different workouts on the same day).
+WORKOUT_KEY = ["Date", "Gym_Day"]
+
+
+def workouts_of(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per workout (the first set of each Date + Gym_Day pair)."""
+    return df.drop_duplicates(WORKOUT_KEY)
+
+
+def workout_count(df: pd.DataFrame) -> int:
+    return len(workouts_of(df))
 
 ROW_MEANING = "Each row is one set performed in the gym."
 
@@ -168,7 +179,7 @@ def _missing_value_lines(df: pd.DataFrame, workout_level: list[str]) -> list[str
     per_set = [c for c in df.columns if c not in workout_level]
     set_nulls = df[per_set].isna().sum()
     set_nulls = set_nulls[set_nulls > 0]
-    workouts = df.drop_duplicates("Date")
+    workouts = workouts_of(df)
     wk_nulls = workouts[workout_level].isna().sum() if workout_level else pd.Series(dtype=int)
     wk_nulls = wk_nulls[wk_nulls > 0]
     if set_nulls.empty and wk_nulls.empty:
@@ -201,7 +212,7 @@ def build_schema_context(df: pd.DataFrame, n_samples: int = 5, max_values: int =
     lines = [
         ROW_MEANING,
         f"Python: a pandas DataFrame named `{DF_NAME}`. SQL: a table named `{SQL_TABLE_NAME}` with the same columns.",
-        f"Rows: {len(df)} | Workouts (distinct dates): {df['Date'].nunique()} | "
+        f"Rows: {len(df)} | Workouts (unique Date + Gym_Day pairs): {workout_count(df)} | "
         f"Dates: {df['Date'].min():%Y-%m-%d} to {df['Date'].max():%Y-%m-%d}",
         "",
         "Columns (name (pandas dtype): meaning):",
@@ -215,7 +226,7 @@ def build_schema_context(df: pd.DataFrame, n_samples: int = 5, max_values: int =
         "",
         f"Workout-level columns ({', '.join(workout_level)}): every set in a workout repeats the same value, and "
         "one workout = a unique Date and Gym_Day combination. To count or average across WORKOUTS, first keep one row per unique Date/Gym_Day combination "
-        f"(pandas: {DF_NAME}.drop_duplicates(subset=['Date','Gym_Day']); SQL: SELECT DISTINCT Date, Gym_Day <column> FROM {SQL_TABLE_NAME}). "
+        f"(pandas: {DF_NAME}.drop_duplicates(subset=['Date','Gym_Day']); SQL: SELECT DISTINCT Date, Gym_Day, <column> FROM {SQL_TABLE_NAME}). "
         "Using every row instead would weight each workout by its number of sets.",
     ]
 
@@ -286,7 +297,7 @@ def build_greeting(df: pd.DataFrame) -> Greeting:
     ]
     intro = (
         f"Hi! I'm connected to Kevin's workout log: **{_plural(len(df), 'set')}** across "
-        f"**{_plural(df['Date'].nunique(), 'workout')}**, "
+        f"**{_plural(workout_count(df), 'workout')}**, "
         f"from **{_fmt_date(first)}** to **{_fmt_date(last)}**. Each row is one set.\n\n{set_table}"
     )
     outro = "\n".join([

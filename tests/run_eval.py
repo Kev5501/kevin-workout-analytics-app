@@ -35,12 +35,15 @@ class Expect:
 
 
 def _workouts(df: pd.DataFrame) -> pd.DataFrame:
-    """Workout-level columns repeat on every set, so one row per workout date."""
-    return df.drop_duplicates("Date")
+    """Workout-level columns repeat on every set, so one row per workout.
+
+    A workout is one Date + Gym_Day pair: Kevin can do two different workouts on the same day.
+    """
+    return df.drop_duplicates(["Date", "Gym_Day"])
 
 
 def total_sets(df): return Expect(numbers=[len(df)])
-def workout_count(df): return Expect(numbers=[df["Date"].nunique()])
+def workout_count(df): return Expect(numbers=[len(_workouts(df))])
 def top_exercise(df): return Expect(words=[str(df["Exercise"].value_counts().index[0])])
 def heaviest_weight(df): return Expect(numbers=[float(df["Weight"].max())])
 def heaviest_exercise(df): return Expect(words=[str(df.loc[df["Weight"].idxmax(), "Exercise"])])
