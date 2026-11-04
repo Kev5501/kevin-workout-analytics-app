@@ -46,12 +46,17 @@ send_reasoning_effort = false   # run it with no extra request params (no reason
 [models.nemotron_super_free]
 provider = "openrouter"
 model = "nvidia/nemotron-3.5-super-vl:free"
-send_reasoning_effort = false   # run it with no extra request params (no reasoning setting, no max_tokens)
+send_reasoning_effort = false   
+
+[models.openrouter_any_free_model]
+provider = "openrouter"
+model = "openrouter/free"
+send_reasoning_effort = false  
 
 
 # ---- which model does which job ------------------------------------------
 [nodes]
-router      = ["microsoft_decision_1","jev"]                # classify the question (structured output)
-rewriter    = ["gemini_flash", "gemini_flash_lite"]  # standalone follow-up rewrite + clarifying question text
-coder       = ["nemotron_ultra_free", "nemotron_super_free", "gemini_flash_lite"]   # writes the SQL / Python
-synthesizer = ["gemini_flash", "gemini_flash_lite"]  # turns results into the final answer
+router      = ["microsoft_decision_1","jev"]                                                                     # classify the question (structured output)
+rewriter    = ["gemini_flash", "gemini_flash_lite","openrouter_any_free_model"]                                  # standalone follow-up rewrite + clarifying question text
+coder       = ["nemotron_ultra_free", "nemotron_super_free", "gemini_flash_lite", "openrouter_any_free_model"]   # writes the SQL / Python
+synthesizer = ["gemini_flash", "gemini_flash_lite", "openrouter_any_free_model"]                                 # turns results into the final answer
