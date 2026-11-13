@@ -105,6 +105,29 @@ def test_conversation_memory_keeps_only_questions_and_answers(graph, monkeypatch
     assert [(m.type, m.content) for m in msgs] == [("human", "one?"), ("ai", "Answer."), ("human", "two?"), ("ai", "Answer.")]
 
 
+def test_stored_history_rebuilds_a_forgotten_thread(graph, monkeypatch):
+    """After an app restart the checkpointer is empty; the stored conversation is replayed so follow-ups work."""
+    fake, seen = script(
+        monkeypatch, [decision("sql", followup=0.9)],
+        {"generate_sql_code": SQL_OK, "synthesizer": "ok", "rewrite": "How many sets of Squat?"},
+    )
+    history = [("user", "How many sets of bench?"), ("assistant", "Kevin did 4 sets of bench.")]
+    res = run_turn(graph, "restored", "and for squats?", history=history)
+    assert res.standalone_question == "How many sets of Squat?"
+    assert "How many sets of bench?" in fake.human_for("rewrite")[0]
+    assert seen[0]["previous_questions"] == ["How many sets of bench?"]
+    msgs = graph.get_state({"configurable": {"thread_id": "restored"}}).values["messages"]
+    assert [m.content for m in msgs] == ["How many sets of bench?", "Kevin did 4 sets of bench.", "and for squats?", "ok"]
+
+
+def test_stored_history_is_ignored_when_the_thread_is_still_in_memory(graph, monkeypatch):
+    script(monkeypatch, [decision("sql")], {"generate_sql_code": SQL_OK, "synthesizer": "Answer."})
+    run_turn(graph, "t1", "one?")
+    run_turn(graph, "t1", "two?", history=[("user", "one?"), ("assistant", "Answer.")])
+    msgs = graph.get_state({"configurable": {"thread_id": "t1"}}).values["messages"]
+    assert [m.content for m in msgs] == ["one?", "Answer.", "two?", "Answer."]                 # no duplicates
+
+
 def test_threads_are_isolated(graph, monkeypatch):
     script(monkeypatch, [decision("sql")], {"generate_sql_code": SQL_OK, "synthesizer": "A"})
     run_turn(graph, "alice", "q1")

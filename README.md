@@ -15,7 +15,7 @@ The base data is a Google Sheet with basic (exercise, weight, reps, RPE, etc.) a
 - **Purpose-built**: Use Jev-like router models to ensure questions pertain only to my workout logs and nothing else.
 - **Basic safety for LLM generated code execution**: SQL is read-only, and Python runs in an isolated process with no imports, files, or network access.
 - **Keep personal data personal**: free-text `Comment` values are masked from models.
-- **Quality of life chat features**: short term memory for follow-up questions.
+- **Quality of life chat features**: short term memory for follow-up questions, long term memory only for Kevin in GCP.
 - **Streamlined swapping of models**: change which model does which job by editing one TOML file, with no code changes.
 - **Easily expandable**: Tools can easily be added later on to increase the functionality of the app.
 
@@ -103,9 +103,11 @@ workout-llm/
 │   ├── schema.py           # data dictionary, LLM schema context, opening greeting
 │   ├── data.py             # Google Sheets loading and cleaning
 │   ├── access.py           # roles, passwords, guest limits
+│   ├── jobs.py             # background turns (answers survive the page going away)
+│   ├── conversations.py    # conversation stores: memory (guests) and Firestore (Kevin, last 10)
 │   └── config.py           # secrets, constants, models.toml loader
 ├── tests/                  # unit tests (fake LLMs) + live eval harness and question set
-└── scripts/                # ask from the terminal, check the sheet, smoke-test models, try the sandbox
+└── scripts/                # ask from the terminal, check the sheet or Firestore, smoke-test models, try the sandbox
 ```
 
 ## Tech Stack
@@ -116,6 +118,7 @@ workout-llm/
 | Agent orchestration | LangGraph, LangChain |
 | LLM providers | Google Gemini (`langchain-google-genai`), OpenRouter (`langchain-openai`, Decisions API) |
 | Data store | Google Sheets via `gspread` and a read-only service account |
+| Conversation history | GCP Firestore (`google-cloud-firestore`) |
 | Analysis | pandas, NumPy, DuckDB (SQL) |
 | Charts | Plotly |
 | Validation / config | Pydantic, TOML |

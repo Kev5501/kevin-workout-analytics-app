@@ -54,7 +54,7 @@ class DataLoadError(Exception):
 # --------------------------------------------------------------------------
 # Fetching
 # --------------------------------------------------------------------------
-def _service_account_info() -> dict[str, Any]:
+def service_account_info() -> dict[str, Any]:
     info = get_secret("gcp_service_account")
     if not info:
         raise DataLoadError("Missing secret 'gcp_service_account' (the service account JSON as a TOML table).")
@@ -66,7 +66,7 @@ def _service_account_info() -> dict[str, Any]:
 
 
 def get_client() -> gspread.Client:
-    info = _service_account_info()
+    info = service_account_info()
     try:
         creds = Credentials.from_service_account_info(info, scopes=SHEETS_SCOPES)
     except (ValueError, KeyError) as exc:
@@ -79,7 +79,7 @@ def fetch_rows() -> list[list[Any]]:
     url = get_secret("GOOGLE_SHEET_URL")
     if not url:
         raise DataLoadError("Missing secret 'GOOGLE_SHEET_URL'.")
-    email = _service_account_info().get("client_email", "the service account")
+    email = service_account_info().get("client_email", "the service account")
     client = get_client()
     try:
         worksheet = client.open_by_url(url).worksheet(SHEET_WORKSHEET)

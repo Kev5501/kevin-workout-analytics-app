@@ -29,6 +29,11 @@ DATA_CACHE_TTL_SECONDS = 600
 GUEST_QUESTION_LIMIT = 5
 GUEST_DAILY_LIMIT = 10
 
+# Kevin's conversation history (sidebar). Stored in Firestore in the service account's own GCP project;
+# only the newest KEVIN_HISTORY_LIMIT conversations are kept. Guest conversations stay in process memory.
+KEVIN_HISTORY_LIMIT = 10
+FIRESTORE_COLLECTION = "kevin_conversations"
+
 # --------------------------------------------------------------------------
 # Secrets
 # --------------------------------------------------------------------------

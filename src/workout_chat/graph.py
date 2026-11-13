@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import pandas as pd
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -123,13 +123,31 @@ class TurnResult:
     error: str = ""                                   # technical detail (shown to Kevin only)
 
 
-def run_turn(graph, thread_id: str, question: str, on_step: Callable[[str], None] | None = None) -> TurnResult:
-    """Run one question through the graph on conversation ``thread_id``. Never raises."""
+def _seed_messages(graph, cfg: dict, history: Sequence[tuple[str, str]] | None) -> list:
+    """Earlier turns to replay when the checkpointer has forgotten this thread (e.g. after an app restart)."""
+    if not history or graph.get_state(cfg).values.get("messages"):
+        return []
+    return [HumanMessage(text) if role == "user" else AIMessage(text) for role, text in history]
+
+
+def run_turn(
+    graph,
+    thread_id: str,
+    question: str,
+    on_step: Callable[[str], None] | None = None,
+    history: Sequence[tuple[str, str]] | None = None,
+) -> TurnResult:
+    """Run one question through the graph on conversation ``thread_id``. Never raises.
+
+    ``history`` is the stored conversation so far as (role, text) pairs, role "user" or "assistant". It is
+    only used when the checkpointer has no messages for the thread, so follow-ups work after a restart.
+    """
     cfg = {"configurable": {"thread_id": thread_id}}
     try:
         if on_step:
             on_step(INITIAL_LABEL)
-        for chunk in graph.stream({"messages": [HumanMessage(question)]}, cfg, stream_mode="updates"):
+        messages = _seed_messages(graph, cfg, history) + [HumanMessage(question)]
+        for chunk in graph.stream({"messages": messages}, cfg, stream_mode="updates"):
             for node, update in chunk.items():
                 label = _label_after(node, update)
                 if on_step and label:

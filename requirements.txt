@@ -8,6 +8,7 @@ langchain-openai==1.6.7
 requests==2.34.2
 gspread==6.2.1
 google-auth==2.60.0
+google-cloud-firestore==2.34.1  # Kevin's conversation history
 pandas==3.0.6
 numpy==2.5.3
 duckdb==1.5.6

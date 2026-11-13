@@ -6,11 +6,37 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from workout_chat import access, config, data, graph as graph_module
+from fakes import FakeFirestore
+from workout_chat import access, config, conversations, data, graph as graph_module, jobs
 from workout_chat.graph import TurnResult
 
 APP = Path(__file__).resolve().parents[1] / "app.py"
 KEVIN_PW, GUEST_PW = "kev-pw", "guest-pw"
+PENDING_NOTE = "You can close this page; the answer will be here when you come back."
+
+
+class Backend(list):
+    """The (thread_id, question) calls the fake graph received, plus handles on the other fakes."""
+
+    def __init__(self):
+        super().__init__()
+        self.histories = []          # the ``history`` passed with each call
+        self.db = FakeFirestore()    # Kevin's "Firestore"
+        self.hold = False            # True: background turns wait until release()
+        self.held = []
+
+    # Executor protocol: run turns inline (deterministic), or hold them to simulate a slow model.
+    def submit(self, fn, *args):
+        if self.hold:
+            self.held.append((fn, args))
+        else:
+            fn(*args)
+
+    def release(self):
+        self.hold = False
+        while self.held:
+            fn, args = self.held.pop(0)
+            fn(*args)
 
 
 @pytest.fixture(autouse=True)
@@ -28,12 +54,15 @@ def env(monkeypatch):
 def fake_backend(monkeypatch, sample_df):
     import streamlit as st
     st.cache_resource.clear()
-    calls = []
+    calls = Backend()
     monkeypatch.setattr(data, "load_dataframe", lambda: sample_df)
     monkeypatch.setattr(graph_module, "build_graph", lambda df, **kw: object())
+    monkeypatch.setattr(jobs, "_default_executor", lambda: calls)
+    monkeypatch.setattr(conversations, "make_firestore_client", lambda info: calls.db)
 
-    def fake_run_turn(graph, thread_id, question, on_step=None):
+    def fake_run_turn(graph, thread_id, question, on_step=None, history=None):
         calls.append((thread_id, question))
+        calls.histories.append(list(history or []))
         if on_step:
             on_step("Reading the question...")
         return TurnResult(answer=f"Answer to: {question}", route="sql", code="SELECT 1", language="sql",
@@ -186,3 +215,115 @@ def test_data_load_failure_is_shown_not_crashed(fake_backend, monkeypatch):
     monkeypatch.setattr(data, "load_dataframe", boom)
     at = login(start(), "Kevin", KEVIN_PW)
     assert "Sheet not shared" in at.error[0].value and not at.exception
+
+
+# ---- surviving reloads (phone sleep) and Kevin's history ---------------------------------------
+def reopen(conv_id):
+    """A brand-new browser session (what a phone reload gives you) opened on ``?c=conv_id``."""
+    at = AppTest.from_file(str(APP), default_timeout=30)
+    at.query_params["c"] = conv_id
+    at.run()
+    return at
+
+
+def conversation_buttons(at):
+    return [b for b in at.sidebar.button if b.label not in ("New chat", "Refresh data")]
+
+
+def test_the_conversation_id_is_kept_in_the_url(fake_backend):
+    at = login(start(), "Kevin", KEVIN_PW)
+    ask(at, "How many sets?")
+    assert at.query_params["c"] == fake_backend[0][0]
+
+
+@pytest.mark.parametrize("who,password", [("Kevin", KEVIN_PW), ("A guest", GUEST_PW)])
+def test_a_reloaded_page_gets_the_conversation_back_after_logging_in(fake_backend, who, password):
+    at = login(start(), who, password)
+    ask(at, "How many sets?")
+    conv_id = fake_backend[0][0]
+    again = login(reopen(conv_id), who, password)
+    assert "How many sets?" in texts(again) and "Answer to: How many sets?" in texts(again)
+    ask(again, "and squats?")
+    assert fake_backend[1][0] == conv_id                                  # same conversation continues
+
+
+def test_reloading_while_the_answer_is_running_shows_progress_then_the_answer(fake_backend):
+    fake_backend.hold = True
+    at = login(start(), "Kevin", KEVIN_PW)
+    ask(at, "How many sets?")
+    assert any(c.value == PENDING_NOTE for c in at.caption)
+    assert at.chat_input[0].proto.disabled                                # one question at a time
+    conv_id = at.query_params["c"]
+
+    again = login(reopen(conv_id), "Kevin", KEVIN_PW)                     # phone woke up and reloaded
+    assert "How many sets?" in texts(again) and any(c.value == PENDING_NOTE for c in again.caption)
+
+    fake_backend.release()                                               # the model finally answers
+    again.run()
+    assert "Answer to: How many sets?" in texts(again)
+    assert not any(c.value == PENDING_NOTE for c in again.caption) and not again.chat_input[0].proto.disabled
+
+
+def test_the_original_page_also_gets_the_answer_when_it_finishes(fake_backend):
+    fake_backend.hold = True
+    at = login(start(), "A guest", GUEST_PW)
+    ask(at, "How many sets?")
+    fake_backend.release()
+    at.run()
+    assert texts(at).count("Answer to: How many sets?") == 1
+
+
+def test_a_guest_cannot_open_kevins_conversation(fake_backend):
+    at = login(start(), "Kevin", KEVIN_PW)
+    ask(at, "Kevin's private question")
+    kevin_id = fake_backend[0][0]
+    guest = login(reopen(kevin_id), "A guest", GUEST_PW)
+    assert not any("private" in t for t in texts(guest))
+    assert guest.query_params["c"] != kevin_id
+    ask(guest, "guest question")
+    assert fake_backend[1][0] != kevin_id                                 # never shares Kevin's LangGraph thread
+
+
+def test_follow_ups_send_the_stored_history_along(fake_backend):
+    at = login(start(), "Kevin", KEVIN_PW)
+    ask(at, "first")
+    ask(at, "second")
+    assert fake_backend.histories == [[], [("user", "first"), ("assistant", "Answer to: first")]]
+
+
+def test_kevins_sidebar_lists_his_ten_most_recent_conversations(fake_backend):
+    at = login(start(), "Kevin", KEVIN_PW)
+    for i in range(12):
+        ask(at, f"question {i}")
+        next(b for b in at.sidebar.button if b.label == "New chat").click().run()
+    labels = [b.label for b in conversation_buttons(at)]
+    assert len(labels) == 10 and labels[0].startswith("question 11") and labels[-1].startswith("question 2")
+    assert len(fake_backend.db.data[config.FIRESTORE_COLLECTION]) == 10   # older ones are pruned from storage
+
+    next(b for b in conversation_buttons(at) if b.label.startswith("question 5")).click().run()
+    assert "Answer to: question 5" in texts(at) and "Answer to: question 11" not in texts(at)
+    ask(at, "follow-up")
+    assert conversation_buttons(at)[0].label.startswith("question 5")    # most recent moves to the top
+
+
+def test_kevins_history_survives_an_app_restart(fake_backend):
+    import streamlit as st
+    at = login(start(), "Kevin", KEVIN_PW)
+    ask(at, "before the restart")
+    st.cache_resource.clear()                                             # memory, jobs and checkpointer are gone
+    again = login(start(), "Kevin", KEVIN_PW)
+    assert conversation_buttons(again)[0].label.startswith("before the restart")
+
+
+def test_guests_get_no_history_sidebar_and_never_touch_firestore(fake_backend):
+    at = login(start(), "A guest", GUEST_PW)
+    ask(at, "q")
+    assert conversation_buttons(at) == [] and fake_backend.db.calls == []
+
+
+def test_firestore_outage_keeps_the_chat_working_with_a_note(fake_backend, monkeypatch):
+    fake_backend.db.fail = RuntimeError("403 Cloud Firestore API has not been used in project")
+    at = login(start(), "Kevin", KEVIN_PW)
+    assert any("History isn't being saved" in c.value for c in at.sidebar.caption)
+    ask(at, "still works?")
+    assert "Answer to: still works?" in texts(at) and not at.exception
