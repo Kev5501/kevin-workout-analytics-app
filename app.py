@@ -79,7 +79,7 @@ def store_for(role: str):
 
 # ---- login -----------------------------------------------------------------------------------
 def login_screen() -> None:
-    st.title("🏋️ Kevin's Workout Chat")
+    st.title("💪 Kevin's GainsGPT 💪")
     label = st.radio("Who are you?", list(access.ROLE_CHOICES), index=None)
     if label is None:
         st.stop()
