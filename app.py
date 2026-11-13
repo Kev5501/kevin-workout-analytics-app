@@ -25,7 +25,7 @@ from workout_chat.schema import build_greeting, workout_count  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="Kevin's Workout Chat", page_icon="🏋️", layout="centered")
+st.set_page_config(page_title="Kevin's GainsGPT", page_icon="🏋️", layout="centered")
 
 POLL_SECONDS = 2
 
@@ -284,7 +284,7 @@ with st.sidebar:
     if is_kevin:
         recent_conversations(store, conv)
 
-st.title("🏋️ Kevin's Workout Chat")
+st.title("💪 Kevin's GainsGPT 💪")
 with st.chat_message("assistant"):
     show(greeting_message(df, role), is_kevin)
 for msg in conv.messages:
